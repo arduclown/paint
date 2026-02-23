@@ -1,0 +1,498 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:GraphicEditor.ViewModels"
+        x:Class="GraphicEditor.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        x:CompileBindings="True"
+        Title="Графический редактор"
+        Width="1200" Height="750"
+        MinWidth="900" MinHeight="600">
+
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Ctrl+Z" Command="{Binding UndoCommand}" />
+        <KeyBinding Gesture="Ctrl+Y" Command="{Binding RedoCommand}" />
+        <KeyBinding Gesture="Delete" Command="{Binding DeleteCommand}" />
+    </Window.KeyBindings>
+
+    <DockPanel>
+
+        <!-- ═══════════════ ПАНЕЛЬ ИНСТРУМЕНТОВ ═══════════════ -->
+        <Border DockPanel.Dock="Top"
+                Background="#2D2D30"
+                Padding="8,6">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+
+                <!-- Инструменты рисования -->
+                <ToggleButton Content="↖ Выбор"
+                              IsChecked="{Binding IsSelectTool}"
+                              ToolTip.Tip="Инструмент выделения (S)"
+                              Classes="toolBtn" />
+                <ToggleButton Content="● Круг"
+                              IsChecked="{Binding IsCircleTool}"
+                              ToolTip.Tip="Нарисовать круг (C)"
+                              Classes="toolBtn" />
+                <ToggleButton Content="▬ Прямоугольник"
+                              IsChecked="{Binding IsRectangleTool}"
+                              ToolTip.Tip="Нарисовать прямоугольник (R)"
+                              Classes="toolBtn" />
+                <ToggleButton Content="▲ Треугольник"
+                              IsChecked="{Binding IsTriangleTool}"
+                              ToolTip.Tip="Нарисовать треугольник (T)"
+                              Classes="toolBtn" />
+                <ToggleButton Content="╱ Линия"
+                              IsChecked="{Binding IsLineTool}"
+                              ToolTip.Tip="Нарисовать линию (L)"
+                              Classes="toolBtn" />
+
+                <Separator Width="1" Height="28" Background="#555" Margin="4,0" />
+
+                <!-- Отмена / Повтор -->
+                <Button Content="↩ Отмена"
+                        Command="{Binding UndoCommand}"
+                        IsEnabled="{Binding CanUndo}"
+                        ToolTip.Tip="Отменить (Ctrl+Z)"
+                        Classes="actionBtn" />
+                <Button Content="↪ Повтор"
+                        Command="{Binding RedoCommand}"
+                        IsEnabled="{Binding CanRedo}"
+                        ToolTip.Tip="Повторить (Ctrl+Y)"
+                        Classes="actionBtn" />
+
+                <Separator Width="1" Height="28" Background="#555" Margin="4,0" />
+
+                <!-- Сохранение -->
+                <Button Content="📂 Открыть…"
+                        Click="ImportButton_Click"
+                        ToolTip.Tip="Импортировать сцену из JSON"
+                        Classes="actionBtn" />
+                <Button Content="💾Сохранить…"
+                        Click="ExportButton_Click"
+                        ToolTip.Tip="Экспортировать в SVG, PDF или JSON"
+                        Classes="actionBtn" />
+
+                <Separator Width="1" Height="28" Background="#555" Margin="4,0" />
+
+                <Button Content="🗑 Очистить"
+                        Command="{Binding ClearAllCommand}"
+                        ToolTip.Tip="Удалить все фигуры"
+                        Classes="actionBtn" />
+
+                <Separator Width="1" Height="28" Background="#555" Margin="4,0" />
+
+                <ToggleButton Content="⊞ Сетка"
+                              IsChecked="{Binding SnapEnabled, Mode=TwoWay}"
+                              ToolTip.Tip="Привязка к сетке (40 px)"
+                              Classes="toolBtn" />
+
+                <Separator Width="1" Height="28" Background="#555" Margin="4,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- ═══════════════ ОСНОВНОЙ КОНТЕНТ ═══════════════ -->
+        <Grid ColumnDefinitions="185,*,210">
+
+            <!-- ─── ЛЕВАЯ ПАНЕЛЬ: список фигур + слои ─── -->
+            <Border Grid.Column="0"
+                    Background="#252526"
+                    BorderBrush="#3F3F46"
+                    BorderThickness="0,0,1,0">
+                <Grid RowDefinitions="*,Auto,220">
+
+                    <!-- Строка 0: список фигур -->
+                    <DockPanel Grid.Row="0">
+                        <TextBlock DockPanel.Dock="Top"
+                                   Text="ФИГУРЫ"
+                                   Foreground="#AAAAAA"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Margin="10,10,10,6" />
+
+                        <ListBox ItemsSource="{Binding Shapes}"
+                                 SelectedItem="{Binding SelectedShape}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Margin="4,0,4,4">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ShapeViewModel">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,3">
+                                        <!-- Цветной индикатор -->
+                                        <Border Width="12" Height="12"
+                                                CornerRadius="2"
+                                                BorderThickness="1">
+                                            <Border.Background>
+                                                <SolidColorBrush Color="{Binding FillColor}" />
+                                            </Border.Background>
+                                            <Border.BorderBrush>
+                                                <SolidColorBrush Color="{Binding StrokeColor}" />
+                                            </Border.BorderBrush>
+                                        </Border>
+                                        <TextBlock Text="{Binding Name}"
+                                                   Foreground="#D4D4D4"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="12" />
+                                        <TextBlock Text="{Binding LayerName}"
+                                                   Foreground="#666"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="10" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+
+                    <!-- Строка 1: заголовок слоёв + кнопки -->
+                    <StackPanel Grid.Row="1" Margin="6,4,6,2" Spacing="4">
+                        <Separator Background="#3F3F46" Height="1" />
+                        <TextBlock Text="СЛОИ"
+                                   Foreground="#AAAAAA"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Margin="4,2,4,0" />
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <Button Content="+ Слой"
+                                    Command="{Binding AddLayerCommand}"
+                                    Classes="actionBtn"
+                                    Padding="6,3"
+                                    FontSize="11" />
+                            <Button Content="🗑"
+                                    Command="{Binding DeleteLayerCommand}"
+                                    Classes="actionBtn"
+                                    Padding="6,3"
+                                    FontSize="11" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Строка 2: раскрывающиеся слои со списком фигур -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Layers}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:LayerViewModel">
+                                    <Border BorderBrush="#3F3F46" BorderThickness="0,0,0,1">
+                                        <Expander IsExpanded="True" Padding="0,0,0,2">
+                                            <Expander.Header>
+                                                <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,2">
+                                                    <ToggleButton IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                                                  Content="👁"
+                                                                  Width="22" Height="18"
+                                                                  Padding="0" FontSize="10"
+                                                                  ToolTip.Tip="Показать/скрыть слой" />
+                                                    <TextBlock Text="{Binding Name}"
+                                                               FontSize="12"
+                                                               VerticalAlignment="Center"
+                                                               Cursor="Hand"
+                                                               Classes.activeLayerText="{Binding IsActive}"
+                                                               PointerPressed="LayerName_PointerPressed" />
+                                                </StackPanel>
+                                            </Expander.Header>
+                                            <!-- Фигуры слоя -->
+                                            <ItemsControl ItemsSource="{Binding Shapes}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:ShapeViewModel">
+                                                        <Border Padding="20,2,4,2"
+                                                                Cursor="Hand"
+                                                                Classes="layerShapeRow"
+                                                                Classes.layerSelected="{Binding IsSelected}"
+                                                                PointerPressed="LayerShape_PointerPressed">
+                                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                                <Border Width="9" Height="9"
+                                                                        CornerRadius="2"
+                                                                        BorderThickness="1">
+                                                                    <Border.Background>
+                                                                        <SolidColorBrush Color="{Binding FillColor}" />
+                                                                    </Border.Background>
+                                                                    <Border.BorderBrush>
+                                                                        <SolidColorBrush Color="{Binding StrokeColor}" />
+                                                                    </Border.BorderBrush>
+                                                                </Border>
+                                                                <TextBlock Text="{Binding Name}"
+                                                                           Foreground="#BBBBBB"
+                                                                           FontSize="11"
+                                                                           VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Expander>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                </Grid>
+            </Border>
+
+            <!-- ─── ЦЕНТРАЛЬНАЯ ОБЛАСТЬ: холст ─── -->
+            <Border Grid.Column="1" Background="#1E1E1E">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto">
+                    <!-- Холст с фиксированным размером (рабочая область) -->
+                    <Canvas x:Name="DrawingCanvas"
+                            Width="1600" Height="1200"
+                            Background="White"
+                            ClipToBounds="True"
+                            PointerPressed="Canvas_PointerPressed"
+                            PointerMoved="Canvas_PointerMoved"
+                            PointerReleased="Canvas_PointerReleased">
+
+                        <!-- Сетка (рисуется в code-behind) -->
+                        <Canvas x:Name="GridCanvas" IsHitTestVisible="False" />
+
+                        <!-- Фигуры через ItemsControl -->
+                        <ItemsControl ItemsSource="{Binding Shapes}"
+                                      Canvas.Left="0" Canvas.Top="0"
+                                      Width="1600" Height="1200"
+                                      IsHitTestVisible="True">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <Canvas />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ShapeViewModel">
+                                    <Path Data="{Binding Geometry}"
+                                          StrokeThickness="{Binding StrokeThickness}"
+                                          IsVisible="{Binding IsVisible}"
+                                          IsHitTestVisible="True"
+                                          PointerPressed="Shape_PointerPressed">
+                                        <Path.Fill>
+                                            <SolidColorBrush Color="{Binding FillColor}"
+                                                             Opacity="{Binding Opacity}" />
+                                        </Path.Fill>
+                                        <Path.Stroke>
+                                            <SolidColorBrush Color="{Binding StrokeColor}" />
+                                        </Path.Stroke>
+                                    </Path>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Превью: отображается во время рисования -->
+                        <Path x:Name="PreviewPath"
+                              IsVisible="False"
+                              IsHitTestVisible="False"
+                              Stroke="#FF4444"
+                              StrokeThickness="1.5"
+                              Fill="Transparent"
+                              Canvas.Left="0" Canvas.Top="0" />
+
+                        <!-- Маркеры масштабирования для выделенной фигуры -->
+                        <Canvas x:Name="HandlesCanvas"
+                                IsHitTestVisible="True"
+                                Canvas.Left="0" Canvas.Top="0" />
+
+                    </Canvas>
+                </ScrollViewer>
+            </Border>
+
+            <!-- ─── ПРАВАЯ ПАНЕЛЬ: свойства ─── -->
+            <Border Grid.Column="2"
+                    Background="#252526"
+                    BorderBrush="#3F3F46"
+                    BorderThickness="1,0,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="10" Spacing="12">
+
+                        <TextBlock Text="СВОЙСТВА"
+                                   Foreground="#AAAAAA"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Margin="0,4,0,0" />
+
+                        <!-- Имя фигуры и слой -->
+                        <StackPanel IsVisible="{Binding HasSelection}" Spacing="4">
+                            <TextBlock Text="Имя:" Foreground="#D4D4D4" FontSize="12" />
+                            <TextBox x:Name="ShapeNameBox"
+                                     Background="#3C3C3C"
+                                     Foreground="White"
+                                     BorderBrush="#555"
+                                     FontSize="13"
+                                     TextChanged="ShapeNameBox_TextChanged" />
+                            <TextBlock Text="Слой:" Foreground="#D4D4D4" FontSize="12" />
+                            <ComboBox x:Name="LayerComboBox"
+                                      ItemsSource="{Binding Layers}"
+                                      HorizontalAlignment="Stretch"
+                                      SelectionChanged="LayerComboBox_SelectionChanged">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:LayerViewModel">
+                                        <TextBlock Text="{Binding Name}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <Separator Background="#3F3F46" Height="1" />
+
+                        <!-- ЦВЕТ ЗАЛИВКИ -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Цвет заливки:" Foreground="#D4D4D4" FontSize="12" />
+                            <WrapPanel x:Name="FillColorPanel" />
+                        </StackPanel>
+
+                        <!-- ЦВЕТ ОБВОДКИ -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Цвет обводки:" Foreground="#D4D4D4" FontSize="12" />
+                            <WrapPanel x:Name="StrokeColorPanel" />
+                        </StackPanel>
+
+                        <!-- Прозрачность -->
+                        <StackPanel IsVisible="{Binding HasSelection}" Spacing="4">
+                            <TextBlock Text="Прозрачность:" Foreground="#D4D4D4" FontSize="12" />
+                            <Slider x:Name="OpacitySlider"
+                                    Minimum="0.1" Maximum="1.0"
+                                    Value="1.0"
+                                    TickFrequency="0.1"
+                                    ValueChanged="OpacitySlider_ValueChanged" />
+                        </StackPanel>
+
+                        <Separator Background="#3F3F46" Height="1" />
+
+                        <!-- ТРАНСФОРМАЦИИ -->
+                        <StackPanel IsVisible="{Binding HasSelection}" Spacing="6">
+                            <TextBlock Text="Масштаб: тяните угловые маркеры"
+                                       Foreground="#888888" FontSize="11"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Text="Поворот:" Foreground="#D4D4D4" FontSize="12" />
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Content="↺ -15°"
+                                        Classes="transformBtn"
+                                        Click="RotateLeft_Click" />
+                                <Button Content="↻ +15°"
+                                        Classes="transformBtn"
+                                        Click="RotateRight_Click" />
+                            </StackPanel>
+
+                            <TextBlock Text="Отражение:" Foreground="#D4D4D4" FontSize="12" />
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Content="⟺ по X"
+                                        Classes="transformBtn"
+                                        Click="MirrorX_Click" />
+                                <Button Content="⟷ по Y"
+                                        Classes="transformBtn"
+                                        Click="MirrorY_Click" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Separator Background="#3F3F46" Height="1" />
+
+                        <!-- Удаление -->
+                        <Button Content="🗑 Удалить фигуру"
+                                Command="{Binding DeleteCommand}"
+                                IsVisible="{Binding HasSelection}"
+                                HorizontalAlignment="Stretch"
+                                Classes="deleteBtn" />
+
+                        <Separator Background="#3F3F46" Height="1" />
+
+                        <!-- Подсказка -->
+                        <TextBlock IsVisible="{Binding !HasSelection}"
+                                   Text="Нажмите на фигуру&#10;для её выбора"
+                                   Foreground="#666"
+                                   FontSize="12"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+        </Grid>
+    </DockPanel>
+
+    <!-- ══════════ СТИЛИ ══════════ -->
+    <Window.Styles>
+
+        <!-- Кнопки панели инструментов -->
+        <Style Selector="ToggleButton.toolBtn">
+            <Setter Property="Background" Value="#3C3C3C" />
+            <Setter Property="Foreground" Value="#D4D4D4" />
+            <Setter Property="BorderBrush" Value="#555" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <Style Selector="ToggleButton.toolBtn:checked">
+            <Setter Property="Background" Value="#007ACC" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="#0098FF" />
+        </Style>
+        <Style Selector="ToggleButton.toolBtn:pointerover">
+            <Setter Property="Background" Value="#4C4C4C" />
+        </Style>
+
+        <Style Selector="Button.actionBtn">
+            <Setter Property="Background" Value="#3C3C3C" />
+            <Setter Property="Foreground" Value="#D4D4D4" />
+            <Setter Property="BorderBrush" Value="#555" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <Style Selector="Button.actionBtn:pointerover">
+            <Setter Property="Background" Value="#4C4C4C" />
+        </Style>
+        <Style Selector="Button.actionBtn:disabled">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+
+        <Style Selector="Button.transformBtn">
+            <Setter Property="Background" Value="#3C3C3C" />
+            <Setter Property="Foreground" Value="#D4D4D4" />
+            <Setter Property="BorderBrush" Value="#555" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Button.transformBtn:pointerover">
+            <Setter Property="Background" Value="#4C4C4C" />
+        </Style>
+
+        <Style Selector="Button.deleteBtn">
+            <Setter Property="Background" Value="#6B1A1A" />
+            <Setter Property="Foreground" Value="#FF9999" />
+            <Setter Property="BorderBrush" Value="#922" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <Style Selector="Button.deleteBtn:pointerover">
+            <Setter Property="Background" Value="#8B2222" />
+        </Style>
+
+        <Style Selector="ListBoxItem">
+            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="CornerRadius" Value="3" />
+        </Style>
+        <Style Selector="ListBoxItem:selected">
+            <Setter Property="Background" Value="#094771" />
+        </Style>
+        <Style Selector="ListBoxItem:pointerover">
+            <Setter Property="Background" Value="#2D2D30" />
+        </Style>
+
+        <!-- Строка фигуры в панели слоёв -->
+        <Style Selector="Border.layerShapeRow">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.layerShapeRow:pointerover">
+            <Setter Property="Background" Value="#2D2D30" />
+        </Style>
+        <Style Selector="Border.layerShapeRow.layerSelected">
+            <Setter Property="Background" Value="#094771" />
+        </Style>
+
+        <!-- Имя активного слоя — полужирный белый -->
+        <Style Selector="TextBlock.activeLayerText">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+    </Window.Styles>
+
+</Window>
