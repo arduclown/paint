@@ -9,6 +9,7 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using GraphicEditor.Common.Models;
 using GraphicEditor.TeamImport;
 using GraphicEditor.ViewModels;
 
@@ -36,7 +37,6 @@ public partial class MainWindow : Window
     // ─── Маркеры масштабирования ───
     private readonly Ellipse[] _handles = new Ellipse[4];
     private ShapeViewModel? _handleShape;
-
 
     // ─── Палитра цветов ───
     private static readonly (Color color, string name)[] Palette =
@@ -169,13 +169,13 @@ public partial class MainWindow : Window
 
         var b = shape.Bounds;
         // Порядок: TL, TR, BR, BL
-        double[] xs = { b.Left, b.Right, b.Right, b.Left  };
-        double[] ys = { b.Top,  b.Top,   b.Bottom, b.Bottom };
+        double[] xs = { b.Left, b.Right, b.Right, b.Left };
+        double[] ys = { b.Top, b.Top, b.Bottom, b.Bottom };
 
         for (int i = 0; i < 4; i++)
         {
             Canvas.SetLeft(_handles[i], xs[i] - 5);
-            Canvas.SetTop(_handles[i],  ys[i] - 5);
+            Canvas.SetTop(_handles[i], ys[i] - 5);
             _handles[i].IsVisible = true;
         }
     }
@@ -187,7 +187,7 @@ public partial class MainWindow : Window
 
         _isResizing = true;
         var b = VM.SelectedShape.Bounds;
-        _resizeCenter    = new Point(b.X + b.Width / 2, b.Y + b.Height / 2);
+        _resizeCenter = new Point(b.X + b.Width / 2, b.Y + b.Height / 2);
         _resizeStartDist = Math.Max(1, Dist(_resizeCenter, e.GetPosition(DrawingCanvas)));
         _resizeLastRatio = 1.0;
 
@@ -223,14 +223,14 @@ public partial class MainWindow : Window
             case ToolType.Line:
             {
                 // Привязка к ближайшему кратному 45°
-                double len     = Math.Sqrt(dx * dx + dy * dy);
-                double angle   = Math.Atan2(dy, dx);
+                double len = Math.Sqrt(dx * dx + dy * dy);
+                double angle = Math.Atan2(dy, dx);
                 double snapped = Math.Round(angle / (Math.PI / 4)) * (Math.PI / 4);
                 return new Point(start.X + len * Math.Cos(snapped),
                                  start.Y + len * Math.Sin(snapped));
             }
             default:
-                return current; // Круг уже идеально круглый
+                return current;
         }
     }
 
@@ -279,7 +279,7 @@ public partial class MainWindow : Window
             double dist = Dist(_resizeCenter, pos);
             if (dist >= 5 && _resizeStartDist >= 1)
             {
-                double ratio     = dist / _resizeStartDist;
+                double ratio = dist / _resizeStartDist;
                 double increment = ratio / _resizeLastRatio;
                 if (increment > 0.05 && increment < 20)
                 {
@@ -342,7 +342,7 @@ public partial class MainWindow : Window
             {
                 VM.SelectedShape = vm;
 
-                // Начинаем перетаскивание; захватываем холст, чтобы PointerMoved шёл туда
+                // Начинаем перетаскивание
                 _isDragging = true;
                 _dragTarget = vm;
                 _dragLastPos = e.GetPosition(DrawingCanvas);
@@ -359,10 +359,10 @@ public partial class MainWindow : Window
     {
         string? pathData = VM.CurrentTool switch
         {
-            ToolType.Circle    => BuildCirclePreview(_drawStart, current),
+            ToolType.Circle => BuildCirclePreview(_drawStart, current),
             ToolType.Rectangle => BuildRectPreview(_drawStart, current),
-            ToolType.Triangle  => BuildTrianglePreview(_drawStart, current),
-            ToolType.Line      => BuildLinePreview(_drawStart, current),
+            ToolType.Triangle => BuildTrianglePreview(_drawStart, current),
+            ToolType.Line => BuildLinePreview(_drawStart, current),
             _ => null,
         };
 
@@ -525,8 +525,8 @@ public partial class MainWindow : Window
             var path = file.Path.LocalPath;
             switch (System.IO.Path.GetExtension(path).ToLowerInvariant())
             {
-                case ".svg":  SvgExporter.Export(VM.Shapes, path);        break;
-                case ".pdf":  PdfExporter.Export(VM.Shapes, path);        break;
+                case ".svg": SvgExporter.Export(VM.Shapes, path); break;
+                case ".pdf": PdfExporter.Export(VM.Shapes, path); break;
                 case ".json": SceneSerializer.ExportJson(VM.Shapes, path); break;
             }
         }

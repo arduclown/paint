@@ -1,19 +1,18 @@
-using GraphicEditor.TeamCore.Scene;
+using GraphicEditor.Common.Interfaces;
 
-namespace GraphicEditor.TeamCore.Commands
+namespace GraphicEditor.TeamCore.Commands;
+
+public class RotateShapeCommand : IEditorCommand
 {
-    public class RotateShapeCommand : IEditorCommand
+    private readonly ISceneShape _shape;
+    private readonly double _angle;
+
+    public RotateShapeCommand(ISceneShape shape, double angle)
     {
-        private readonly ISceneShape _shape;
-        private readonly double _angle;
-
-        public RotateShapeCommand(ISceneShape shape, double angle)
-        {
-            _shape = shape;
-            _angle = angle;
-        }
-
-        public void Execute() => _shape.Rotate(_angle);
-        public void Undo() => _shape.Rotate(-_angle);
+        _shape = shape;
+        _angle = angle;
     }
+
+    public void Execute() => _shape.Rotate(_angle);
+    public void Undo() => _shape.Rotate(-_angle);
 }

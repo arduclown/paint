@@ -1,20 +1,19 @@
 using Avalonia;
-using GraphicEditor.TeamCore.Scene;
+using GraphicEditor.Common.Interfaces;
 
-namespace GraphicEditor.TeamCore.Commands
+namespace GraphicEditor.TeamCore.Commands;
+
+public class MoveShapeCommand : IEditorCommand
 {
-    public class MoveShapeCommand : IEditorCommand
+    private readonly ISceneShape _shape;
+    private readonly Point _delta;
+
+    public MoveShapeCommand(ISceneShape shape, Point delta)
     {
-        private readonly ISceneShape _shape;
-        private readonly Point _delta;
-
-        public MoveShapeCommand(ISceneShape shape, Point delta)
-        {
-            _shape = shape;
-            _delta = delta;
-        }
-
-        public void Execute() => _shape.Move(_delta);
-        public void Undo() => _shape.Move(new Point(-_delta.X, -_delta.Y));
+        _shape = shape;
+        _delta = delta;
     }
+
+    public void Execute() => _shape.Move(_delta);
+    public void Undo() => _shape.Move(new Point(-_delta.X, -_delta.Y));
 }
