@@ -266,6 +266,7 @@ public partial class MainWindow : Window
     private void Canvas_PointerMoved(object? sender, PointerEventArgs e)
     {
         var pos = e.GetPosition(DrawingCanvas);
+        VM.StatusMouse = $"X: {(int)pos.X}, Y: {(int)pos.Y}";
 
         if (_isDrawing)
         {
@@ -592,13 +593,14 @@ public partial class MainWindow : Window
                 : null;
             _suppressLayerComboChange = false;
 
-            // Обновляем маркеры масштабирования
+            // Обновляем маркеры масштабирования и рамку выделения
             if (_handleShape != null)
                 _handleShape.PropertyChanged -= OnHandleShapeChanged;
             _handleShape = shape;
             if (_handleShape != null)
                 _handleShape.PropertyChanged += OnHandleShapeChanged;
             UpdateHandles(shape);
+            UpdateSelectionRect(shape);
         }
     }
 
@@ -606,6 +608,89 @@ public partial class MainWindow : Window
         System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ShapeViewModel.Bounds))
+        {
             UpdateHandles(VM.SelectedShape);
+            UpdateSelectionRect(VM.SelectedShape);
+        }
+    }
+
+    // ══════════════════════════════════════════════
+    //  ГОРЯЧИЕ КЛАВИШИ
+    // ══════════════════════════════════════════════
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        // Игнорируем, если фокус в TextBox
+        if (FocusManager?.GetFocusedElement() is TextBox) return;
+
+        if (e.KeyModifiers == KeyModifiers.Control)
+        {
+            switch (e.Key)
+            {
+                case Key.S:
+                    ExportButton_Click(this, new Avalonia.Interactivity.RoutedEventArgs());
+                    e.Handled = true;
+                    return;
+                case Key.O:
+                    ImportButton_Click(this, new Avalonia.Interactivity.RoutedEventArgs());
+                    e.Handled = true;
+                    return;
+                case Key.C:
+                    VM.CopySelected();
+                    e.Handled = true;
+                    return;
+                case Key.V:
+                    VM.PasteClipboard();
+                    e.Handled = true;
+                    return;
+            }
+        }
+
+        if (e.KeyModifiers != KeyModifiers.None) return;
+
+        switch (e.Key)
+        {
+            case Key.S: VM.CurrentTool = ToolType.Select; e.Handled = true; break;
+            case Key.C: VM.CurrentTool = ToolType.Circle; e.Handled = true; break;
+            case Key.R: VM.CurrentTool = ToolType.Rectangle; e.Handled = true; break;
+            case Key.T: VM.CurrentTool = ToolType.Triangle; e.Handled = true; break;
+            case Key.L: VM.CurrentTool = ToolType.Line; e.Handled = true; break;
+        }
+    }
+
+    // ══════════════════════════════════════════════
+    //  ЗУМ (Ctrl + колёсико мыши)
+    // ══════════════════════════════════════════════
+
+    private void Canvas_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+
+        double delta = e.Delta.Y > 0 ? 0.1 : -0.1;
+        VM.ZoomFactor += delta;
+        e.Handled = true;
+    }
+
+    // ══════════════════════════════════════════════
+    //  ПУНКТИРНАЯ РАМКА ВЫДЕЛЕНИЯ
+    // ══════════════════════════════════════════════
+
+    private void UpdateSelectionRect(ShapeViewModel? shape)
+    {
+        if (shape == null)
+        {
+            SelectionRect.IsVisible = false;
+            return;
+        }
+
+        var b = shape.Bounds;
+        const double pad = 4;
+        Canvas.SetLeft(SelectionRect, b.Left - pad);
+        Canvas.SetTop(SelectionRect, b.Top - pad);
+        SelectionRect.Width = b.Width + pad * 2;
+        SelectionRect.Height = b.Height + pad * 2;
+        SelectionRect.IsVisible = true;
     }
 }

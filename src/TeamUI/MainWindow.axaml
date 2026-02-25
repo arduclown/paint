@@ -88,6 +88,30 @@
             </StackPanel>
         </Border>
 
+        <!-- ═══════════════ СТАТУСНАЯ СТРОКА ═══════════════ -->
+        <Border DockPanel.Dock="Bottom"
+                Background="#007ACC"
+                Padding="10,4">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding StatusTool, StringFormat='Инструмент: {0}'}"
+                           Foreground="White" FontSize="12"
+                           Margin="0,0,20,0" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding StatusMouse}"
+                           Foreground="White" FontSize="12"
+                           Margin="0,0,20,0" />
+                <TextBlock Grid.Column="2" />
+                <TextBlock Grid.Column="3"
+                           Text="{Binding StatusZoom}"
+                           Foreground="White" FontSize="12"
+                           Margin="0,0,20,0" />
+                <TextBlock Grid.Column="4"
+                           Text="{Binding StatusCanvasSize}"
+                           Foreground="White" FontSize="12" />
+            </Grid>
+        </Border>
+
         <!-- ═══════════════ ОСНОВНОЙ КОНТЕНТ ═══════════════ -->
         <Grid ColumnDefinitions="185,*,210">
 
@@ -227,6 +251,11 @@
             <Border Grid.Column="1" Background="#1E1E1E">
                 <ScrollViewer HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Auto">
+                  <LayoutTransformControl>
+                    <LayoutTransformControl.LayoutTransform>
+                        <ScaleTransform ScaleX="{Binding ZoomFactor}"
+                                        ScaleY="{Binding ZoomFactor}" />
+                    </LayoutTransformControl.LayoutTransform>
                     <!-- Холст с фиксированным размером (рабочая область) -->
                     <Canvas x:Name="DrawingCanvas"
                             Width="1600" Height="1200"
@@ -234,7 +263,8 @@
                             ClipToBounds="True"
                             PointerPressed="Canvas_PointerPressed"
                             PointerMoved="Canvas_PointerMoved"
-                            PointerReleased="Canvas_PointerReleased">
+                            PointerReleased="Canvas_PointerReleased"
+                            PointerWheelChanged="Canvas_PointerWheelChanged">
 
                         <!-- Сетка (рисуется в code-behind) -->
                         <Canvas x:Name="GridCanvas" IsHitTestVisible="False" />
@@ -277,12 +307,22 @@
                               Fill="Transparent"
                               Canvas.Left="0" Canvas.Top="0" />
 
+                        <!-- Пунктирная рамка выделения -->
+                        <Rectangle x:Name="SelectionRect"
+                                   IsVisible="False"
+                                   IsHitTestVisible="False"
+                                   Stroke="#569CD6"
+                                   StrokeThickness="1"
+                                   StrokeDashArray="4,3"
+                                   Fill="Transparent" />
+
                         <!-- Маркеры масштабирования для выделенной фигуры -->
                         <Canvas x:Name="HandlesCanvas"
                                 IsHitTestVisible="True"
                                 Canvas.Left="0" Canvas.Top="0" />
 
                     </Canvas>
+                  </LayoutTransformControl>
                 </ScrollViewer>
             </Border>
 
@@ -323,6 +363,26 @@
                         </StackPanel>
 
                         <Separator Background="#3F3F46" Height="1" />
+
+                        <!-- Индикаторы активных цветов -->
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
+                            <TextBlock Text="Заливка:" Foreground="#999" FontSize="11"
+                                       VerticalAlignment="Center" />
+                            <Border Width="22" Height="22" CornerRadius="3"
+                                    BorderThickness="1" BorderBrush="#888">
+                                <Border.Background>
+                                    <SolidColorBrush Color="{Binding ActiveFillColor}" />
+                                </Border.Background>
+                            </Border>
+                            <TextBlock Text="Обводка:" Foreground="#999" FontSize="11"
+                                       VerticalAlignment="Center" Margin="6,0,0,0" />
+                            <Border Width="22" Height="22" CornerRadius="3"
+                                    BorderThickness="1" BorderBrush="#888">
+                                <Border.Background>
+                                    <SolidColorBrush Color="{Binding ActiveStrokeColor}" />
+                                </Border.Background>
+                            </Border>
+                        </StackPanel>
 
                         <!-- ЦВЕТ ЗАЛИВКИ -->
                         <StackPanel Spacing="6">

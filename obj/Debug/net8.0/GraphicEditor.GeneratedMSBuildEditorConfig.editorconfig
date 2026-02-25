@@ -15,12 +15,12 @@ build_property.PlatformNeutralAssembly =
 build_property.EnforceExtendedAnalyzerRules = 
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.RootNamespace = GraphicEditor
-build_property.ProjectDir = /Users/maridudkina/Downloads/graphic-editor-basic_geometry/
+build_property.ProjectDir = /root/paint/
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 
 
-[/Users/maridudkina/Downloads/graphic-editor-basic_geometry/src/TeamUI/App.axaml]
+[/root/paint/src/TeamUI/App.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[/Users/maridudkina/Downloads/graphic-editor-basic_geometry/src/TeamUI/MainWindow.axaml]
+[/root/paint/src/TeamUI/MainWindow.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml

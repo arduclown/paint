@@ -1418,19 +1418,19 @@
     ]
   },
   "packageFolders": {
-    "/Users/maridudkina/.nuget/packages/": {}
+    "/root/.nuget/packages/": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/Users/maridudkina/Downloads/graphic-editor-basic_geometry/GraphicEditor.csproj",
+      "projectUniqueName": "/root/paint/GraphicEditor.csproj",
       "projectName": "GraphicEditor",
-      "projectPath": "/Users/maridudkina/Downloads/graphic-editor-basic_geometry/GraphicEditor.csproj",
-      "packagesPath": "/Users/maridudkina/.nuget/packages/",
-      "outputPath": "/Users/maridudkina/Downloads/graphic-editor-basic_geometry/obj/",
+      "projectPath": "/root/paint/GraphicEditor.csproj",
+      "packagesPath": "/root/.nuget/packages/",
+      "outputPath": "/root/paint/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "/Users/maridudkina/.nuget/NuGet/NuGet.Config"
+        "/root/.nuget/NuGet/NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
@@ -1500,7 +1500,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/8.0.401/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/8.0.418/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

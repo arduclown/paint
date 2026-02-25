@@ -1,3 +1,4 @@
+using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -41,6 +42,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
     // ───── Сервис создания фигур (UI-фасад над фабриками) ─────
     private readonly ShapeCreationService _shapeCreator = new();
+
+    // ───── Буфер обмена (копирование/вставка) ─────
+    private ShapeDto? _clipboard;
 
     // ───── Привязка к сетке ─────
     private bool _snapEnabled;
@@ -86,6 +90,15 @@ public class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsRectangleTool));
             OnPropertyChanged(nameof(IsTriangleTool));
             OnPropertyChanged(nameof(IsLineTool));
+            StatusTool = value switch
+            {
+                ToolType.Select => "Выбор",
+                ToolType.Circle => "Круг",
+                ToolType.Rectangle => "Прямоугольник",
+                ToolType.Triangle => "Треугольник",
+                ToolType.Line => "Линия",
+                _ => "Выбор",
+            };
         }
     }
 
@@ -143,6 +156,29 @@ public class MainWindowViewModel : INotifyPropertyChanged
         get => _activeStrokeColor;
         set => SetField(ref _activeStrokeColor, value);
     }
+
+    // ───── Зум ─────
+    private double _zoomFactor = 1.0;
+    public double ZoomFactor
+    {
+        get => _zoomFactor;
+        set
+        {
+            if (SetField(ref _zoomFactor, Math.Clamp(value, 0.25, 4.0)))
+                OnPropertyChanged(nameof(StatusZoom));
+        }
+    }
+
+    // ───── Статусная строка ─────
+    private string _statusTool = "Выбор";
+    public string StatusTool { get => _statusTool; set => SetField(ref _statusTool, value); }
+
+    private string _statusMouse = "X: 0, Y: 0";
+    public string StatusMouse { get => _statusMouse; set => SetField(ref _statusMouse, value); }
+
+    public string StatusZoom => $"{(int)(_zoomFactor * 100)}%";
+
+    public string StatusCanvasSize => "1600 × 1200";
 
     public MainWindowViewModel()
     {
@@ -347,6 +383,32 @@ public class MainWindowViewModel : INotifyPropertyChanged
 
         foreach (var vm in SceneSerializer.ImportJson(path))
             Shapes.Add(vm);
+    }
+
+    // ───── Копирование / вставка ─────
+
+    public void CopySelected()
+    {
+        if (_selectedShape == null) return;
+        _clipboard = ShapeDto.FromViewModel(_selectedShape);
+    }
+
+    public void PasteClipboard()
+    {
+        if (_clipboard == null) return;
+        var clone = _clipboard.ToViewModel();
+        if (clone == null) return;
+
+        clone.Name = _clipboard.Name + " (копия)";
+        clone.Move(new Point(20, 20));
+        clone.LayerName = ActiveLayer?.Name ?? "Слой 1";
+        clone.IsVisible = ActiveLayer?.IsVisible ?? true;
+
+        AddShape(clone);
+        SelectedShape = clone;
+
+        // Обновляем буфер, чтобы следующая вставка была со смещением
+        _clipboard = ShapeDto.FromViewModel(clone);
     }
 
     private void ExecuteScene(System.Action action)
