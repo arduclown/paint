@@ -2,17 +2,9 @@ using GraphicEditor.Common.Interfaces;
 
 namespace GraphicEditor.TeamCore.Commands;
 
-public class RotateShapeCommand : IEditorCommand
+/// <summary>Команда поворота фигуры на заданный угол.</summary>
+public class RotateShapeCommand(ISceneShape shape, double angle) : IEditorCommand
 {
-    private readonly ISceneShape _shape;
-    private readonly double _angle;
-
-    public RotateShapeCommand(ISceneShape shape, double angle)
-    {
-        _shape = shape;
-        _angle = angle;
-    }
-
-    public void Execute() => _shape.Rotate(_angle);
-    public void Undo() => _shape.Rotate(-_angle);
+    public void Execute() => shape.Rotate(angle);
+    public void Undo() => shape.Rotate(-angle);
 }

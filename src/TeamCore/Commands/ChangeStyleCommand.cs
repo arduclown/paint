@@ -3,32 +3,22 @@ using GraphicEditor.Common.Interfaces;
 
 namespace GraphicEditor.TeamCore.Commands;
 
-public class ChangeStyleCommand : IEditorCommand
+/// <summary>Команда смены цвета заливки и обводки (с запоминанием старых значений).</summary>
+public class ChangeStyleCommand(ISceneShape shape, Color newFill, Color newStroke) : IEditorCommand
 {
-    private readonly ISceneShape _shape;
-    private readonly Color _newFill;
-    private readonly Color _oldFill;
-    private readonly Color _newStroke;
-    private readonly Color _oldStroke;
-
-    public ChangeStyleCommand(ISceneShape shape, Color newFill, Color newStroke)
-    {
-        _shape = shape;
-        _newFill = newFill;
-        _newStroke = newStroke;
-        _oldFill = shape.FillColor;
-        _oldStroke = shape.StrokeColor;
-    }
+    // Сохраняем прежние цвета для отмены
+    private readonly Color _oldFill = shape.FillColor;
+    private readonly Color _oldStroke = shape.StrokeColor;
 
     public void Execute()
     {
-        _shape.FillColor = _newFill;
-        _shape.StrokeColor = _newStroke;
+        shape.FillColor = newFill;
+        shape.StrokeColor = newStroke;
     }
 
     public void Undo()
     {
-        _shape.FillColor = _oldFill;
-        _shape.StrokeColor = _oldStroke;
+        shape.FillColor = _oldFill;
+        shape.StrokeColor = _oldStroke;
     }
 }

@@ -4,34 +4,28 @@ using GraphicEditor.Common.Interfaces;
 
 namespace GraphicEditor.TeamTools.Shapes;
 
-public class Circle : IShape
+/// <summary>Круг — единственная фигура без полигонального представления.</summary>
+public class Circle(Point center, double radius) : IShape
 {
-    private Point _center;
-    private double _radius;
+    private Point _center = radius > 0
+        ? center
+        : throw new ArgumentOutOfRangeException(nameof(radius));
+
+    private double _radius = radius;
 
     public Point Center => _center;
     public double Radius => _radius;
 
-    public Circle(Point center, double radius)
-    {
-        if (radius <= 0)
-            throw new ArgumentOutOfRangeException(nameof(radius));
-        _center = center;
-        _radius = radius;
-    }
-
-    public void Move(Point offset)
-    {
+    public void Move(Point offset) =>
         _center = new Point(_center.X + offset.X, _center.Y + offset.Y);
-    }
 
     public void Scale(double ratio)
     {
-        if (ratio == 0)
-            throw new ArgumentOutOfRangeException(nameof(ratio));
+        if (ratio == 0) throw new ArgumentOutOfRangeException(nameof(ratio));
         _radius *= ratio;
     }
 
+    // У круга поворот и отражение не меняют геометрию
     public void Rotate(double angle) { }
     public void MirrorX() { }
     public void MirrorY() { }

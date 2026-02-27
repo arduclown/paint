@@ -66,6 +66,7 @@ public class PolygonViewModel : ShapeViewModel
 
     public override void Rotate(double angle)
     {
+        RotationAngle += angle;
         _polygon.Rotate(angle);
         NotifyGeometryChanged();
     }

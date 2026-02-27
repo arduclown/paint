@@ -14,6 +14,15 @@ public class Rectangle : Quadrilateral
                new Point(Math.Min(first.X, second.X), Math.Max(first.Y, second.Y)))
     { }
 
+    /// <summary>Конструктор с явным центром — для десериализации.</summary>
+    public Rectangle(Point first, Point second, Point center)
+        : base(new Point(Math.Min(first.X, second.X), Math.Min(first.Y, second.Y)),
+               new Point(Math.Max(first.X, second.X), Math.Min(first.Y, second.Y)),
+               new Point(Math.Max(first.X, second.X), Math.Max(first.Y, second.Y)),
+               new Point(Math.Min(first.X, second.X), Math.Max(first.Y, second.Y)),
+               center)
+    { }
+
     public override string SerializedData => BuildPath();
 
     private string BuildPath()

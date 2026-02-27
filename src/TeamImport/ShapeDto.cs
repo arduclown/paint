@@ -4,112 +4,183 @@ using Avalonia.Media;
 using GraphicEditor.TeamTools.Shapes;
 using GraphicEditor.ViewModels;
 
-namespace GraphicEditor.TeamImport
+namespace GraphicEditor.TeamImport;
+
+/// <summary>
+/// DTO для сериализации/десериализации фигур в JSON.
+/// Новые поля имеют значения по умолчанию — старые файлы загружаются без проблем.
+/// </summary>
+public record ShapeDto
 {
-    // DTO для сериализации/десериализации фигур в JSON
-    public class ShapeDto
+    // Базовые свойства
+    public string Type { get; init; } = "";
+    public string Name { get; init; } = "";
+    public string FillColor { get; init; } = "#FF6495ED";
+    public string StrokeColor { get; init; } = "#FF000000";
+    public double Opacity { get; init; } = 1.0;
+    public string LayerName { get; init; } = "Слой 1";
+    public bool IsVisible { get; init; } = true;
+
+    // Толщина обводки и угол поворота
+    public double StrokeWidth { get; init; } = 1.5;
+    public double RotationAngle { get; init; }
+
+    // Для Circle
+    public double CenterX { get; init; }
+    public double CenterY { get; init; }
+    public double Radius { get; init; }
+
+    // Для Polygon (Rectangle, Triangle, Line)
+    public double[]? PointsX { get; init; }
+    public double[]? PointsY { get; init; }
+
+    // Стабильный центр вращения полигона (null = вычислить заново)
+    public double? RotationCenterX { get; init; }
+    public double? RotationCenterY { get; init; }
+
+    /// <summary>Собирает DTO из ViewModel.</summary>
+    public static ShapeDto FromViewModel(ShapeViewModel vm)
     {
-        public string Type { get; set; } = "";
-        public string Name { get; set; } = "";
-        public string FillColor { get; set; } = "#FF6495ED";
-        public string StrokeColor { get; set; } = "#FF000000";
-        public double Opacity { get; set; } = 1.0;
-        public string LayerName { get; set; } = "Слой 1";
-        public bool IsVisible { get; set; } = true;
-
-        // Для Circle
-        public double CenterX { get; set; }
-        public double CenterY { get; set; }
-        public double Radius { get; set; }
-
-        // Для Polygon (Rectangle, Triangle, Line)
-        public double[]? PointsX { get; set; }
-        public double[]? PointsY { get; set; }
-
-        public static ShapeDto FromViewModel(ShapeViewModel vm)
+        var dto = new ShapeDto
         {
-            var dto = new ShapeDto
+            Type = vm.ShapeType,
+            Name = vm.Name,
+            FillColor = ColorToHex(vm.FillColor),
+            StrokeColor = ColorToHex(vm.StrokeColor),
+            Opacity = vm.Opacity,
+            LayerName = vm.LayerName,
+            IsVisible = vm.IsVisible,
+            StrokeWidth = vm.StrokeWidth,
+            RotationAngle = vm.RotationAngle,
+        };
+
+        if (vm is CircleViewModel cv)
+        {
+            dto = dto with
             {
-                Type = vm.ShapeType,
-                Name = vm.Name,
-                FillColor = ColorToHex(vm.FillColor),
-                StrokeColor = ColorToHex(vm.StrokeColor),
-                Opacity = vm.Opacity,
-                LayerName = vm.LayerName,
-                IsVisible = vm.IsVisible,
+                CenterX = cv.Model.Center.X,
+                CenterY = cv.Model.Center.Y,
+                Radius = cv.Model.Radius,
             };
-
-            if (vm is CircleViewModel cv)
+        }
+        else if (vm is PolygonViewModel pv)
+        {
+            var pts = pv.Model.Points;
+            var xs = new double[pts.Length];
+            var ys = new double[pts.Length];
+            for (int i = 0; i < pts.Length; i++)
             {
-                dto.CenterX = cv.Model.Center.X;
-                dto.CenterY = cv.Model.Center.Y;
-                dto.Radius = cv.Model.Radius;
-            }
-            else if (vm is PolygonViewModel pv)
-            {
-                var pts = pv.Model.Points;
-                dto.PointsX = new double[pts.Length];
-                dto.PointsY = new double[pts.Length];
-                for (int i = 0; i < pts.Length; i++)
-                {
-                    dto.PointsX[i] = pts[i].X;
-                    dto.PointsY[i] = pts[i].Y;
-                }
+                xs[i] = pts[i].X;
+                ys[i] = pts[i].Y;
             }
 
-            return dto;
+            var center = pv.Model.Center;
+            dto = dto with
+            {
+                PointsX = xs,
+                PointsY = ys,
+                RotationCenterX = center.X,
+                RotationCenterY = center.Y,
+            };
         }
 
-        public ShapeViewModel? ToViewModel()
-        {
-            var fill = ParseColor(FillColor);
-            var stroke = ParseColor(StrokeColor);
+        return dto;
+    }
 
-            ShapeViewModel? vm = Type switch
-            {
-                "Circle" => new CircleViewModel(new Circle(new Point(CenterX, CenterY), Radius > 0 ? Radius : 10)),
-                "Rectangle" when PointsX?.Length >= 2 && PointsY?.Length >= 2 =>
-                    new PolygonViewModel(
-                        new Rectangle(
+    /// <summary>Восстанавливает ViewModel из DTO.</summary>
+    public ShapeViewModel? ToViewModel()
+    {
+        var fill = ParseColor(FillColor);
+        var stroke = ParseColor(StrokeColor);
+
+        // Если сохранён центр вращения — передаём его в конструктор
+        Point? savedCenter = RotationCenterX.HasValue && RotationCenterY.HasValue
+            ? new Point(RotationCenterX.Value, RotationCenterY.Value)
+            : null;
+
+        ShapeViewModel? vm = Type switch
+        {
+            "Circle" => new CircleViewModel(
+                new Circle(new Point(CenterX, CenterY), Radius > 0 ? Radius : 10)),
+
+            "Rectangle" when PointsX?.Length >= 4 && PointsY?.Length >= 4 =>
+                CreatePolygonVm(
+                    savedCenter.HasValue
+                        ? new Quadrilateral(
                             new Point(PointsX[0], PointsY[0]),
-                            new Point(PointsX[2], PointsY[2])),
-                        "Rectangle", Name),
-                "Triangle" when PointsX?.Length >= 3 && PointsY?.Length >= 3 =>
-                    new PolygonViewModel(
-                        new Triangle(
+                            new Point(PointsX[1], PointsY[1]),
+                            new Point(PointsX[2], PointsY[2]),
+                            new Point(PointsX[3], PointsY[3]),
+                            savedCenter.Value)
+                        : new Quadrilateral(
+                            new Point(PointsX[0], PointsY[0]),
+                            new Point(PointsX[1], PointsY[1]),
+                            new Point(PointsX[2], PointsY[2]),
+                            new Point(PointsX[3], PointsY[3])),
+                    "Rectangle"),
+
+            // Обратная совместимость: старые JSON с 2 точками прямоугольника
+            "Rectangle" when PointsX?.Length >= 2 && PointsY?.Length >= 2 =>
+                new PolygonViewModel(
+                    new Rectangle(
+                        new Point(PointsX[0], PointsY[0]),
+                        new Point(PointsX[1], PointsY[1])),
+                    "Rectangle", Name),
+
+            "Triangle" when PointsX?.Length >= 3 && PointsY?.Length >= 3 =>
+                CreatePolygonVm(
+                    savedCenter.HasValue
+                        ? new Triangle(
+                            new Point(PointsX[0], PointsY[0]),
+                            new Point(PointsX[1], PointsY[1]),
+                            new Point(PointsX[2], PointsY[2]),
+                            savedCenter.Value)
+                        : new Triangle(
                             new Point(PointsX[0], PointsY[0]),
                             new Point(PointsX[1], PointsY[1]),
                             new Point(PointsX[2], PointsY[2])),
-                        "Triangle", Name),
-                "Line" when PointsX?.Length >= 2 && PointsY?.Length >= 2 =>
-                    new PolygonViewModel(
-                        new Line(
+                    "Triangle"),
+
+            "Line" when PointsX?.Length >= 2 && PointsY?.Length >= 2 =>
+                CreatePolygonVm(
+                    savedCenter.HasValue
+                        ? new Line(
+                            new Point(PointsX[0], PointsY[0]),
+                            new Point(PointsX[1], PointsY[1]),
+                            savedCenter.Value)
+                        : new Line(
                             new Point(PointsX[0], PointsY[0]),
                             new Point(PointsX[1], PointsY[1])),
-                        "Line", Name),
-                _ => null
-            };
+                    "Line"),
 
-            if (vm != null)
-            {
-                vm.Name = Name;
-                vm.FillColor = fill;
-                vm.StrokeColor = stroke;
-                vm.Opacity = Opacity;
-                vm.LayerName = LayerName;
-                vm.IsVisible = IsVisible;
-            }
+            _ => null,
+        };
 
-            return vm;
-        }
-
-        private static string ColorToHex(Color c) =>
-            $"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}";
-
-        private static Color ParseColor(string hex)
+        if (vm is not null)
         {
-            try { return Color.Parse(hex); }
-            catch { return Colors.CornflowerBlue; }
+            vm.Name = Name;
+            vm.FillColor = fill;
+            vm.StrokeColor = stroke;
+            vm.Opacity = Opacity;
+            vm.LayerName = LayerName;
+            vm.IsVisible = IsVisible;
+            vm.StrokeWidth = StrokeWidth;
+            vm.RotationAngle = RotationAngle;
         }
+
+        return vm;
+    }
+
+    // Вспомогательный метод — чтобы не дублировать обёртку
+    private PolygonViewModel CreatePolygonVm(Polygon polygon, string type) =>
+        new(polygon, type, Name);
+
+    private static string ColorToHex(Color c) =>
+        $"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}";
+
+    private static Color ParseColor(string hex)
+    {
+        try { return Color.Parse(hex); }
+        catch { return Colors.CornflowerBlue; }
     }
 }

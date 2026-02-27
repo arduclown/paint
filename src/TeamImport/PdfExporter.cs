@@ -5,6 +5,7 @@ using SkiaSharp;
 
 namespace GraphicEditor.TeamImport;
 
+/// <summary>Экспорт сцены в формат PDF через SkiaSharp.</summary>
 public static class PdfExporter
 {
     public static void Export(IEnumerable<ShapeViewModel> shapes, string path)
@@ -19,8 +20,8 @@ public static class PdfExporter
         {
             if (!shape.IsVisible) continue;
 
-            var skPath = SKPath.ParseSvgPathData(shape.Geometry);
-            if (skPath == null) continue;
+            using var skPath = SKPath.ParseSvgPathData(shape.Geometry);
+            if (skPath is null) continue;
 
             var fc = shape.FillColor;
             if (fc.A > 0)
@@ -39,11 +40,10 @@ public static class PdfExporter
             {
                 Color = new SKColor(sc.R, sc.G, sc.B),
                 Style = SKPaintStyle.Stroke,
-                StrokeWidth = (float)shape.StrokeThickness,
+                StrokeWidth = (float)shape.StrokeWidth,
                 IsAntialias = true,
             };
             canvas.DrawPath(skPath, strokePaint);
-            skPath.Dispose();
         }
 
         doc.EndPage();

@@ -2,17 +2,9 @@ using GraphicEditor.Common.Interfaces;
 
 namespace GraphicEditor.TeamCore.Commands;
 
-public class ScaleShapeCommand : IEditorCommand
+/// <summary>Команда масштабирования фигуры.</summary>
+public class ScaleShapeCommand(ISceneShape shape, double ratio) : IEditorCommand
 {
-    private readonly ISceneShape _shape;
-    private readonly double _ratio;
-
-    public ScaleShapeCommand(ISceneShape shape, double ratio)
-    {
-        _shape = shape;
-        _ratio = ratio;
-    }
-
-    public void Execute() => _shape.Scale(_ratio);
-    public void Undo() => _shape.Scale(1.0 / _ratio);
+    public void Execute() => shape.Scale(ratio);
+    public void Undo() => shape.Scale(1.0 / ratio);
 }

@@ -5,24 +5,19 @@ using GraphicEditor.TeamCore.Commands;
 
 namespace GraphicEditor.TeamCore;
 
-public class SceneManager
+/// <summary>Фасад над CommandManager — управляет сценой через команды с Undo/Redo.</summary>
+public class SceneManager(ISceneCollection shapes)
 {
     private readonly CommandManager _commandManager = new();
-    private readonly ISceneCollection _shapes;
-
-    public SceneManager(ISceneCollection shapes)
-    {
-        _shapes = shapes;
-    }
 
     public bool CanUndo => _commandManager.CanUndo;
     public bool CanRedo => _commandManager.CanRedo;
 
     public void Add(ISceneShape shape) =>
-        _commandManager.ExecuteCommand(new AddShapeCommand(_shapes, shape));
+        _commandManager.ExecuteCommand(new AddShapeCommand(shapes, shape));
 
     public void Delete(ISceneShape shape) =>
-        _commandManager.ExecuteCommand(new DeleteShapeCommand(_shapes, shape));
+        _commandManager.ExecuteCommand(new DeleteShapeCommand(shapes, shape));
 
     public void Move(ISceneShape shape, Point delta) =>
         _commandManager.ExecuteCommand(new MoveShapeCommand(shape, delta));

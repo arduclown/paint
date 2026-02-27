@@ -22,31 +22,38 @@
                 Padding="8,6">
             <StackPanel Orientation="Horizontal" Spacing="4">
 
-                <!-- Инструменты рисования -->
+                <!-- Подпись секции -->
+                <TextBlock Text="Инструменты"
+                           Foreground="#777" FontSize="9"
+                           VerticalAlignment="Center" Margin="0,0,4,0" />
+
                 <ToggleButton Content="↖ Выбор"
                               IsChecked="{Binding IsSelectTool}"
                               ToolTip.Tip="Инструмент выделения (S)"
-                              Classes="toolBtn" />
+                              Classes="toolBtn" MinWidth="68" />
                 <ToggleButton Content="● Круг"
                               IsChecked="{Binding IsCircleTool}"
                               ToolTip.Tip="Нарисовать круг (C)"
-                              Classes="toolBtn" />
-                <ToggleButton Content="▬ Прямоугольник"
+                              Classes="toolBtn" MinWidth="68" />
+                <ToggleButton Content="▬ Прямоуг."
                               IsChecked="{Binding IsRectangleTool}"
                               ToolTip.Tip="Нарисовать прямоугольник (R)"
-                              Classes="toolBtn" />
-                <ToggleButton Content="▲ Треугольник"
+                              Classes="toolBtn" MinWidth="68" />
+                <ToggleButton Content="▲ Треуг."
                               IsChecked="{Binding IsTriangleTool}"
                               ToolTip.Tip="Нарисовать треугольник (T)"
-                              Classes="toolBtn" />
+                              Classes="toolBtn" MinWidth="68" />
                 <ToggleButton Content="╱ Линия"
                               IsChecked="{Binding IsLineTool}"
                               ToolTip.Tip="Нарисовать линию (L)"
-                              Classes="toolBtn" />
+                              Classes="toolBtn" MinWidth="68" />
 
                 <Separator Width="1" Height="28" Background="#555" Margin="4,0" />
 
-                <!-- Отмена / Повтор -->
+                <TextBlock Text="Правка"
+                           Foreground="#777" FontSize="9"
+                           VerticalAlignment="Center" Margin="0,0,4,0" />
+
                 <Button Content="↩ Отмена"
                         Command="{Binding UndoCommand}"
                         IsEnabled="{Binding CanUndo}"
@@ -60,31 +67,43 @@
 
                 <Separator Width="1" Height="28" Background="#555" Margin="4,0" />
 
-                <!-- Сохранение -->
-                <Button Content="📂 Открыть…"
+                <TextBlock Text="Файл"
+                           Foreground="#777" FontSize="9"
+                           VerticalAlignment="Center" Margin="0,0,4,0" />
+
+                <Button Content="Открыть…"
                         Click="ImportButton_Click"
-                        ToolTip.Tip="Импортировать сцену из JSON"
+                        ToolTip.Tip="Импортировать сцену из JSON (Ctrl+O)"
                         Classes="actionBtn" />
-                <Button Content="💾Сохранить…"
+                <Button Content="Сохранить…"
                         Click="ExportButton_Click"
-                        ToolTip.Tip="Экспортировать в SVG, PDF или JSON"
+                        ToolTip.Tip="Экспортировать в SVG, PDF или JSON (Ctrl+S)"
                         Classes="actionBtn" />
 
                 <Separator Width="1" Height="28" Background="#555" Margin="4,0" />
 
-                <Button Content="🗑 Очистить"
+                <Button Content="Очистить"
                         Command="{Binding ClearAllCommand}"
                         ToolTip.Tip="Удалить все фигуры"
                         Classes="actionBtn" />
 
                 <Separator Width="1" Height="28" Background="#555" Margin="4,0" />
 
-                <ToggleButton Content="⊞ Сетка"
+                <ToggleButton Content="Сетка"
                               IsChecked="{Binding SnapEnabled, Mode=TwoWay}"
-                              ToolTip.Tip="Привязка к сетке (40 px)"
+                              ToolTip.Tip="Привязка к сетке"
                               Classes="toolBtn" />
 
-                <Separator Width="1" Height="28" Background="#555" Margin="4,0" />
+                <ComboBox x:Name="GridStepCombo"
+                          Width="60" Height="28"
+                          SelectedIndex="2"
+                          SelectionChanged="GridStepCombo_SelectionChanged"
+                          ToolTip.Tip="Шаг сетки (px)">
+                    <ComboBoxItem Content="10" />
+                    <ComboBoxItem Content="20" />
+                    <ComboBoxItem Content="40" />
+                    <ComboBoxItem Content="80" />
+                </ComboBox>
             </StackPanel>
         </Border>
 
@@ -92,7 +111,7 @@
         <Border DockPanel.Dock="Bottom"
                 Background="#007ACC"
                 Padding="10,4">
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
                 <TextBlock Grid.Column="0"
                            Text="{Binding StatusTool, StringFormat='Инструмент: {0}'}"
                            Foreground="White" FontSize="12"
@@ -101,19 +120,23 @@
                            Text="{Binding StatusMouse}"
                            Foreground="White" FontSize="12"
                            Margin="0,0,20,0" />
-                <TextBlock Grid.Column="2" />
-                <TextBlock Grid.Column="3"
+                <TextBlock Grid.Column="2"
+                           Text="{Binding StatusInfo}"
+                           Foreground="White" FontSize="12"
+                           Margin="0,0,20,0" />
+                <TextBlock Grid.Column="3" />
+                <TextBlock Grid.Column="4"
                            Text="{Binding StatusZoom}"
                            Foreground="White" FontSize="12"
                            Margin="0,0,20,0" />
-                <TextBlock Grid.Column="4"
+                <TextBlock Grid.Column="5"
                            Text="{Binding StatusCanvasSize}"
                            Foreground="White" FontSize="12" />
             </Grid>
         </Border>
 
         <!-- ═══════════════ ОСНОВНОЙ КОНТЕНТ ═══════════════ -->
-        <Grid ColumnDefinitions="185,*,210">
+        <Grid ColumnDefinitions="185,*,230">
 
             <!-- ─── ЛЕВАЯ ПАНЕЛЬ: список фигур + слои ─── -->
             <Border Grid.Column="0"
@@ -135,11 +158,11 @@
                                  SelectedItem="{Binding SelectedShape}"
                                  Background="Transparent"
                                  BorderThickness="0"
-                                 Margin="4,0,4,4">
+                                 Margin="4,0,4,4"
+                                 KeyboardNavigation.TabNavigation="None">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ShapeViewModel">
                                     <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,3">
-                                        <!-- Цветной индикатор -->
                                         <Border Width="12" Height="12"
                                                 CornerRadius="2"
                                                 BorderThickness="1">
@@ -178,7 +201,7 @@
                                     Classes="actionBtn"
                                     Padding="6,3"
                                     FontSize="11" />
-                            <Button Content="🗑"
+                            <Button Content="Удалить"
                                     Command="{Binding DeleteLayerCommand}"
                                     Classes="actionBtn"
                                     Padding="6,3"
@@ -186,7 +209,7 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <!-- Строка 2: раскрывающиеся слои со списком фигур -->
+                    <!-- Строка 2: раскрывающиеся слои -->
                     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding Layers}">
                             <ItemsControl.ItemTemplate>
@@ -196,7 +219,7 @@
                                             <Expander.Header>
                                                 <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,2">
                                                     <ToggleButton IsChecked="{Binding IsVisible, Mode=TwoWay}"
-                                                                  Content="👁"
+                                                                  Content="V"
                                                                   Width="22" Height="18"
                                                                   Padding="0" FontSize="10"
                                                                   ToolTip.Tip="Показать/скрыть слой" />
@@ -208,7 +231,6 @@
                                                                PointerPressed="LayerName_PointerPressed" />
                                                 </StackPanel>
                                             </Expander.Header>
-                                            <!-- Фигуры слоя -->
                                             <ItemsControl ItemsSource="{Binding Shapes}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:ShapeViewModel">
@@ -256,20 +278,18 @@
                         <ScaleTransform ScaleX="{Binding ZoomFactor}"
                                         ScaleY="{Binding ZoomFactor}" />
                     </LayoutTransformControl.LayoutTransform>
-                    <!-- Холст с фиксированным размером (рабочая область) -->
                     <Canvas x:Name="DrawingCanvas"
                             Width="1600" Height="1200"
                             Background="White"
+                            Focusable="True"
                             ClipToBounds="True"
                             PointerPressed="Canvas_PointerPressed"
                             PointerMoved="Canvas_PointerMoved"
                             PointerReleased="Canvas_PointerReleased"
                             PointerWheelChanged="Canvas_PointerWheelChanged">
 
-                        <!-- Сетка (рисуется в code-behind) -->
                         <Canvas x:Name="GridCanvas" IsHitTestVisible="False" />
 
-                        <!-- Фигуры через ItemsControl -->
                         <ItemsControl ItemsSource="{Binding Shapes}"
                                       Canvas.Left="0" Canvas.Top="0"
                                       Width="1600" Height="1200"
@@ -298,7 +318,6 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <!-- Превью: отображается во время рисования -->
                         <Path x:Name="PreviewPath"
                               IsVisible="False"
                               IsHitTestVisible="False"
@@ -307,7 +326,6 @@
                               Fill="Transparent"
                               Canvas.Left="0" Canvas.Top="0" />
 
-                        <!-- Пунктирная рамка выделения -->
                         <Rectangle x:Name="SelectionRect"
                                    IsVisible="False"
                                    IsHitTestVisible="False"
@@ -316,7 +334,6 @@
                                    StrokeDashArray="4,3"
                                    Fill="Transparent" />
 
-                        <!-- Маркеры масштабирования для выделенной фигуры -->
                         <Canvas x:Name="HandlesCanvas"
                                 IsHitTestVisible="True"
                                 Canvas.Left="0" Canvas.Top="0" />
@@ -332,7 +349,7 @@
                     BorderBrush="#3F3F46"
                     BorderThickness="1,0,0,0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="10" Spacing="12">
+                    <StackPanel Margin="10" Spacing="10">
 
                         <TextBlock Text="СВОЙСТВА"
                                    Foreground="#AAAAAA"
@@ -364,8 +381,8 @@
 
                         <Separator Background="#3F3F46" Height="1" />
 
-                        <!-- Индикаторы активных цветов -->
-                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
+                        <!-- Индикаторы цветов -->
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,2">
                             <TextBlock Text="Заливка:" Foreground="#999" FontSize="11"
                                        VerticalAlignment="Center" />
                             <Border Width="22" Height="22" CornerRadius="3"
@@ -385,15 +402,33 @@
                         </StackPanel>
 
                         <!-- ЦВЕТ ЗАЛИВКИ -->
-                        <StackPanel Spacing="6">
+                        <StackPanel Spacing="4">
                             <TextBlock Text="Цвет заливки:" Foreground="#D4D4D4" FontSize="12" />
                             <WrapPanel x:Name="FillColorPanel" />
+                            <TextBox x:Name="FillHexBox"
+                                     Watermark="#RRGGBB"
+                                     Background="#3C3C3C" Foreground="White"
+                                     BorderBrush="#555" FontSize="11"
+                                     KeyDown="FillHexBox_KeyDown"
+                                     ToolTip.Tip="Введите hex-цвет и нажмите Enter" />
                         </StackPanel>
 
                         <!-- ЦВЕТ ОБВОДКИ -->
-                        <StackPanel Spacing="6">
+                        <StackPanel Spacing="4">
                             <TextBlock Text="Цвет обводки:" Foreground="#D4D4D4" FontSize="12" />
                             <WrapPanel x:Name="StrokeColorPanel" />
+                            <TextBox x:Name="StrokeHexBox"
+                                     Watermark="#RRGGBB"
+                                     Background="#3C3C3C" Foreground="White"
+                                     BorderBrush="#555" FontSize="11"
+                                     KeyDown="StrokeHexBox_KeyDown"
+                                     ToolTip.Tip="Введите hex-цвет и нажмите Enter" />
+                        </StackPanel>
+
+                        <!-- Недавние цвета -->
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="Недавние:" Foreground="#888" FontSize="10" />
+                            <WrapPanel x:Name="RecentColorsPanel" />
                         </StackPanel>
 
                         <!-- Прозрачность -->
@@ -406,30 +441,69 @@
                                     ValueChanged="OpacitySlider_ValueChanged" />
                         </StackPanel>
 
+                        <!-- Толщина обводки -->
+                        <StackPanel IsVisible="{Binding HasSelection}" Spacing="4">
+                            <TextBlock Text="Толщина обводки:" Foreground="#D4D4D4" FontSize="12" />
+                            <Slider x:Name="StrokeWidthSlider"
+                                    Minimum="0.5" Maximum="10.0"
+                                    Value="1.5"
+                                    TickFrequency="0.5"
+                                    ValueChanged="StrokeWidthSlider_ValueChanged" />
+                        </StackPanel>
+
                         <Separator Background="#3F3F46" Height="1" />
 
                         <!-- ТРАНСФОРМАЦИИ -->
                         <StackPanel IsVisible="{Binding HasSelection}" Spacing="6">
-                            <TextBlock Text="Масштаб: тяните угловые маркеры"
-                                       Foreground="#888888" FontSize="11"
-                                       TextWrapping="Wrap" />
+
+                            <!-- Позиция -->
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding SelectedShape.Bounds.X, StringFormat='X: {0:F0}'}"
+                                           Foreground="#888" FontSize="11" />
+                                <TextBlock Text="{Binding SelectedShape.Bounds.Y, StringFormat='Y: {0:F0}'}"
+                                           Foreground="#888" FontSize="11" />
+                                <TextBlock Text="{Binding SelectedShape.RotationAngle, StringFormat='Угол: {0:F1}°'}"
+                                           Foreground="#888" FontSize="11" />
+                            </StackPanel>
 
                             <TextBlock Text="Поворот:" Foreground="#D4D4D4" FontSize="12" />
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button Content="↺ -15°"
+
+                            <!-- Ввод произвольного угла -->
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBox x:Name="AngleBox"
+                                         Watermark="Угол°"
+                                         Width="70"
+                                         Background="#3C3C3C" Foreground="White"
+                                         BorderBrush="#555" FontSize="11"
+                                         KeyDown="AngleBox_KeyDown" />
+                                <Button Content="OK"
+                                        Click="ApplyAngle_Click"
                                         Classes="transformBtn"
-                                        Click="RotateLeft_Click" />
-                                <Button Content="↻ +15°"
-                                        Classes="transformBtn"
-                                        Click="RotateRight_Click" />
+                                        Padding="6,3" />
+                            </StackPanel>
+
+                            <!-- Кнопки быстрого поворота -->
+                            <WrapPanel>
+                                <Button Content="-90°" Click="RotateLeft90_Click" Classes="transformBtn" Padding="4,3" Margin="1" />
+                                <Button Content="-45°" Click="RotateLeft45_Click" Classes="transformBtn" Padding="4,3" Margin="1" />
+                                <Button Content="-15°" Click="RotateLeft_Click" Classes="transformBtn" Padding="4,3" Margin="1" />
+                                <Button Content="+15°" Click="RotateRight_Click" Classes="transformBtn" Padding="4,3" Margin="1" />
+                                <Button Content="+45°" Click="RotateRight45_Click" Classes="transformBtn" Padding="4,3" Margin="1" />
+                                <Button Content="+90°" Click="RotateRight90_Click" Classes="transformBtn" Padding="4,3" Margin="1" />
+                            </WrapPanel>
+
+                            <TextBlock Text="Масштаб:" Foreground="#D4D4D4" FontSize="12" />
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <Button Content="0.5x" Click="ScaleHalf_Click" Classes="transformBtn" Padding="6,3" />
+                                <Button Content="2x" Click="ScaleDouble_Click" Classes="transformBtn" Padding="6,3" />
                             </StackPanel>
 
                             <TextBlock Text="Отражение:" Foreground="#D4D4D4" FontSize="12" />
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button Content="⟺ по X"
+                                <Button Content="по X"
                                         Classes="transformBtn"
                                         Click="MirrorX_Click" />
-                                <Button Content="⟷ по Y"
+                                <Button Content="по Y"
                                         Classes="transformBtn"
                                         Click="MirrorY_Click" />
                             </StackPanel>
@@ -438,7 +512,7 @@
                         <Separator Background="#3F3F46" Height="1" />
 
                         <!-- Удаление -->
-                        <Button Content="🗑 Удалить фигуру"
+                        <Button Content="Удалить фигуру"
                                 Command="{Binding DeleteCommand}"
                                 IsVisible="{Binding HasSelection}"
                                 HorizontalAlignment="Stretch"
@@ -463,7 +537,6 @@
     <!-- ══════════ СТИЛИ ══════════ -->
     <Window.Styles>
 
-        <!-- Кнопки панели инструментов -->
         <Style Selector="ToggleButton.toolBtn">
             <Setter Property="Background" Value="#3C3C3C" />
             <Setter Property="Foreground" Value="#D4D4D4" />
@@ -506,7 +579,6 @@
             <Setter Property="Padding" Value="8,4" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="CornerRadius" Value="3" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
         </Style>
         <Style Selector="Button.transformBtn:pointerover">
             <Setter Property="Background" Value="#4C4C4C" />
@@ -536,7 +608,6 @@
             <Setter Property="Background" Value="#2D2D30" />
         </Style>
 
-        <!-- Строка фигуры в панели слоёв -->
         <Style Selector="Border.layerShapeRow">
             <Setter Property="Background" Value="Transparent" />
         </Style>
@@ -547,7 +618,6 @@
             <Setter Property="Background" Value="#094771" />
         </Style>
 
-        <!-- Имя активного слоя — полужирный белый -->
         <Style Selector="TextBlock.activeLayerText">
             <Setter Property="Foreground" Value="White" />
             <Setter Property="FontWeight" Value="SemiBold" />

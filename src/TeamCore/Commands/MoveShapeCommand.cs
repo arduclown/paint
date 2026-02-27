@@ -3,17 +3,9 @@ using GraphicEditor.Common.Interfaces;
 
 namespace GraphicEditor.TeamCore.Commands;
 
-public class MoveShapeCommand : IEditorCommand
+/// <summary>Команда перемещения фигуры на заданный вектор.</summary>
+public class MoveShapeCommand(ISceneShape shape, Point delta) : IEditorCommand
 {
-    private readonly ISceneShape _shape;
-    private readonly Point _delta;
-
-    public MoveShapeCommand(ISceneShape shape, Point delta)
-    {
-        _shape = shape;
-        _delta = delta;
-    }
-
-    public void Execute() => _shape.Move(_delta);
-    public void Undo() => _shape.Move(new Point(-_delta.X, -_delta.Y));
+    public void Execute() => shape.Move(delta);
+    public void Undo() => shape.Move(new Point(-delta.X, -delta.Y));
 }

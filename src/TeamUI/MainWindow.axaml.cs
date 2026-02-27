@@ -34,13 +34,21 @@ public partial class MainWindow : Window
     private double _resizeStartDist;
     private double _resizeLastRatio;
 
-    // ─── Маркеры масштабирования ───
-    private readonly Ellipse[] _handles = new Ellipse[4];
+    // ─── Состояние интерактивного поворота мышью ───
+    private bool _isRotating;
+    private double _rotateStartAngle;
+
+    // ─── Маркеры масштабирования (квадраты 8x8) ───
+    private readonly Avalonia.Controls.Shapes.Rectangle[] _handles = new Avalonia.Controls.Shapes.Rectangle[4];
     private ShapeViewModel? _handleShape;
+
+    // ─── Маркер поворота (зелёный кружок + линия-стебель) ───
+    private Ellipse? _rotationHandle;
+    private Line? _rotationLine;
 
     // ─── Палитра цветов ───
     private static readonly (Color color, string name)[] Palette =
-    {
+    [
         (Colors.CornflowerBlue,  "Голубой"),
         (Colors.Crimson,         "Красный"),
         (Colors.MediumSeaGreen,  "Зелёный"),
@@ -53,7 +61,7 @@ public partial class MainWindow : Window
         (Colors.LightGray,       "Серый"),
         (Colors.Black,           "Чёрный"),
         (Colors.Transparent,     "Без заливки"),
-    };
+    ];
 
     public MainWindow()
     {
@@ -66,7 +74,7 @@ public partial class MainWindow : Window
     {
         BuildColorPalette(FillColorPanel, isFill: true);
         BuildColorPalette(StrokeColorPanel, isFill: false);
-        DrawGrid();
+        DrawGrid(VM.GridStep);
         InitHandles();
     }
 
@@ -105,6 +113,7 @@ public partial class MainWindow : Window
             {
                 if (isFill) VM.ApplyFillColor(captured);
                 else VM.ApplyStrokeColor(captured);
+                RebuildRecentColors();
             };
 
             panel.Children.Add(btn);
@@ -112,16 +121,15 @@ public partial class MainWindow : Window
     }
 
     // ─── Рисуем сетку на GridCanvas ───
-    private void DrawGrid()
+    private void DrawGrid(double step)
     {
-        const double step = 40;
-        const double w = 1600, h = 1200;
+        GridCanvas.Children.Clear();
 
+        const double w = 1600, h = 1200;
         var geomGroup = new GeometryGroup();
 
         for (double x = 0; x <= w; x += step)
             geomGroup.Children.Add(new LineGeometry(new Point(x, 0), new Point(x, h)));
-
         for (double y = 0; y <= h; y += step)
             geomGroup.Children.Add(new LineGeometry(new Point(0, y), new Point(w, y)));
 
@@ -137,16 +145,17 @@ public partial class MainWindow : Window
     }
 
     // ══════════════════════════════════════════════
-    //  МАРКЕРЫ МАСШТАБИРОВАНИЯ
+    //  МАРКЕРЫ МАСШТАБИРОВАНИЯ + ПОВОРОТА
     // ══════════════════════════════════════════════
 
     private void InitHandles()
     {
+        // 4 квадратных маркера ресайза
         for (int i = 0; i < 4; i++)
         {
-            var h = new Ellipse
+            var h = new Avalonia.Controls.Shapes.Rectangle
             {
-                Width = 10, Height = 10,
+                Width = 8, Height = 8,
                 Fill = Brushes.White,
                 Stroke = new SolidColorBrush(Color.FromRgb(86, 156, 214)),
                 StrokeThickness = 1.5,
@@ -157,39 +166,95 @@ public partial class MainWindow : Window
             _handles[i] = h;
             HandlesCanvas.Children.Add(h);
         }
+
+        // Линия-стебель от фигуры к маркеру поворота
+        _rotationLine = new Line
+        {
+            Stroke = new SolidColorBrush(Color.FromRgb(80, 200, 80)),
+            StrokeThickness = 1,
+            IsVisible = false,
+            IsHitTestVisible = false,
+        };
+        HandlesCanvas.Children.Add(_rotationLine);
+
+        // Зелёный кружок — маркер поворота
+        _rotationHandle = new Ellipse
+        {
+            Width = 12, Height = 12,
+            Fill = new SolidColorBrush(Color.FromRgb(80, 200, 80)),
+            Stroke = Brushes.White,
+            StrokeThickness = 1.5,
+            IsVisible = false,
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+        _rotationHandle.PointerPressed += RotationHandle_PointerPressed;
+        HandlesCanvas.Children.Add(_rotationHandle);
     }
 
     private void UpdateHandles(ShapeViewModel? shape)
     {
-        if (shape == null)
+        if (shape is null)
         {
             foreach (var h in _handles) h.IsVisible = false;
+            if (_rotationHandle is not null) _rotationHandle.IsVisible = false;
+            if (_rotationLine is not null) _rotationLine.IsVisible = false;
             return;
         }
 
         var b = shape.Bounds;
-        // Порядок: TL, TR, BR, BL
-        double[] xs = { b.Left, b.Right, b.Right, b.Left };
-        double[] ys = { b.Top, b.Top, b.Bottom, b.Bottom };
+        // Порядок маркеров: TL, TR, BR, BL
+        double[] xs = [b.Left, b.Right, b.Right, b.Left];
+        double[] ys = [b.Top, b.Top, b.Bottom, b.Bottom];
 
         for (int i = 0; i < 4; i++)
         {
-            Canvas.SetLeft(_handles[i], xs[i] - 5);
-            Canvas.SetTop(_handles[i], ys[i] - 5);
+            Canvas.SetLeft(_handles[i], xs[i] - 4);
+            Canvas.SetTop(_handles[i], ys[i] - 4);
             _handles[i].IsVisible = true;
+        }
+
+        // Маркер поворота — сверху по центру
+        if (_rotationHandle is not null && _rotationLine is not null)
+        {
+            double cx = b.Left + b.Width / 2.0;
+            double topY = b.Top;
+            const double stemLen = 25;
+
+            Canvas.SetLeft(_rotationHandle, cx - 6);
+            Canvas.SetTop(_rotationHandle, topY - stemLen - 6);
+            _rotationHandle.IsVisible = true;
+
+            _rotationLine.StartPoint = new Point(cx, topY);
+            _rotationLine.EndPoint = new Point(cx, topY - stemLen);
+            _rotationLine.IsVisible = true;
         }
     }
 
     private void Handle_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(DrawingCanvas).Properties.IsLeftButtonPressed) return;
-        if (VM.SelectedShape == null) return;
+        if (VM.SelectedShape is null) return;
 
         _isResizing = true;
         var b = VM.SelectedShape.Bounds;
         _resizeCenter = new Point(b.X + b.Width / 2, b.Y + b.Height / 2);
         _resizeStartDist = Math.Max(1, Dist(_resizeCenter, e.GetPosition(DrawingCanvas)));
         _resizeLastRatio = 1.0;
+
+        e.Pointer.Capture(DrawingCanvas);
+        e.Handled = true;
+    }
+
+    private void RotationHandle_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(DrawingCanvas).Properties.IsLeftButtonPressed) return;
+        if (VM.SelectedShape is null) return;
+
+        _isRotating = true;
+        var b = VM.SelectedShape.Bounds;
+        var center = new Point(b.X + b.Width / 2, b.Y + b.Height / 2);
+        var pos = e.GetPosition(DrawingCanvas);
+        _rotateStartAngle = Math.Atan2(pos.Y - center.Y, pos.X - center.X) * 180.0 / Math.PI;
 
         e.Pointer.Capture(DrawingCanvas);
         e.Handled = true;
@@ -215,14 +280,12 @@ public partial class MainWindow : Window
             case ToolType.Rectangle:
             case ToolType.Triangle:
             {
-                // Квадратный ограничивающий прямоугольник
                 double size = Math.Max(Math.Abs(dx), Math.Abs(dy));
                 return new Point(start.X + Math.Sign(dx) * size,
                                  start.Y + Math.Sign(dy) * size);
             }
             case ToolType.Line:
             {
-                // Привязка к ближайшему кратному 45°
                 double len = Math.Sqrt(dx * dx + dy * dy);
                 double angle = Math.Atan2(dy, dx);
                 double snapped = Math.Round(angle / (Math.PI / 4)) * (Math.PI / 4);
@@ -242,11 +305,13 @@ public partial class MainWindow : Window
     {
         if (!e.GetCurrentPoint(DrawingCanvas).Properties.IsLeftButtonPressed) return;
 
+        // Перехватываем фокус на канвас
+        DrawingCanvas.Focus();
+
         var pos = e.GetPosition(DrawingCanvas);
 
         if (VM.CurrentTool == ToolType.Select)
         {
-            // Клик на пустом месте — снимаем выделение
             VM.SelectedShape = null;
             return;
         }
@@ -255,7 +320,6 @@ public partial class MainWindow : Window
 
         if (VM.SnapEnabled) pos = SnapToGrid(pos);
 
-        // Режим рисования
         _isDrawing = true;
         _drawStart = pos;
         PreviewPath.IsVisible = true;
@@ -275,7 +339,25 @@ public partial class MainWindow : Window
                 pos = ApplyShiftConstraint(VM.CurrentTool, _drawStart, pos);
             UpdatePreview(pos);
         }
-        else if (_isResizing && VM.SelectedShape != null)
+        else if (_isRotating && VM.SelectedShape is not null)
+        {
+            // Интерактивный поворот мышью
+            var b = VM.SelectedShape.Bounds;
+            var center = new Point(b.X + b.Width / 2, b.Y + b.Height / 2);
+            double currentAngle = Math.Atan2(pos.Y - center.Y, pos.X - center.X) * 180.0 / Math.PI;
+            double delta = currentAngle - _rotateStartAngle;
+
+            // Shift — привязка к шагу 15°
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                delta = Math.Round(delta / 15.0) * 15.0;
+
+            if (Math.Abs(delta) > 0.1)
+            {
+                VM.SelectedShape.Rotate(delta);
+                _rotateStartAngle = currentAngle;
+            }
+        }
+        else if (_isResizing && VM.SelectedShape is not null)
         {
             double dist = Dist(_resizeCenter, pos);
             if (dist >= 5 && _resizeStartDist >= 1)
@@ -289,7 +371,7 @@ public partial class MainWindow : Window
                 }
             }
         }
-        else if (_isDragging && _dragTarget != null)
+        else if (_isDragging && _dragTarget is not null)
         {
             var delta = new Point(pos.X - _dragLastPos.X, pos.Y - _dragLastPos.Y);
             _dragTarget.Move(delta);
@@ -311,7 +393,6 @@ public partial class MainWindow : Window
             if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
                 pos = ApplyShiftConstraint(VM.CurrentTool, _drawStart, pos);
 
-            // Создаём фигуру и добавляем через команду (с поддержкой Undo)
             var shape = VM.CreateShape(VM.CurrentTool, _drawStart, pos);
             VM.AddShape(shape);
             VM.SelectedShape = shape;
@@ -323,7 +404,13 @@ public partial class MainWindow : Window
             e.Pointer.Capture(null);
         }
 
-        if (_isDragging && _dragTarget != null)
+        if (_isRotating)
+        {
+            _isRotating = false;
+            e.Pointer.Capture(null);
+        }
+
+        if (_isDragging && _dragTarget is not null)
         {
             _isDragging = false;
             _dragTarget = null;
@@ -343,13 +430,10 @@ public partial class MainWindow : Window
             {
                 VM.SelectedShape = vm;
 
-                // Начинаем перетаскивание
                 _isDragging = true;
                 _dragTarget = vm;
                 _dragLastPos = e.GetPosition(DrawingCanvas);
                 e.Pointer.Capture(DrawingCanvas);
-
-                // Предотвращаем всплытие к Canvas (иначе снимет выделение)
                 e.Handled = true;
             }
         }
@@ -360,29 +444,23 @@ public partial class MainWindow : Window
     {
         string? pathData = VM.CurrentTool switch
         {
-            ToolType.Circle => BuildCirclePreview(_drawStart, current),
+            ToolType.Circle    => BuildCirclePreview(_drawStart, current),
             ToolType.Rectangle => BuildRectPreview(_drawStart, current),
-            ToolType.Triangle => BuildTrianglePreview(_drawStart, current),
-            ToolType.Line => BuildLinePreview(_drawStart, current),
-            _ => null,
+            ToolType.Triangle  => BuildTrianglePreview(_drawStart, current),
+            ToolType.Line      => BuildLinePreview(_drawStart, current),
+            _                  => null,
         };
 
-        if (pathData != null)
+        if (pathData is not null)
         {
-            try
-            {
-                PreviewPath.Data = Geometry.Parse(pathData);
-            }
-            catch
-            {
-                PreviewPath.Data = null;
-            }
+            try { PreviewPath.Data = Geometry.Parse(pathData); }
+            catch { PreviewPath.Data = null; }
         }
     }
 
-    private static Point SnapToGrid(Point p)
+    private Point SnapToGrid(Point p)
     {
-        const double step = 40.0;
+        double step = VM.GridStep;
         return new Point(
             Math.Round(p.X / step, MidpointRounding.AwayFromZero) * step,
             Math.Round(p.Y / step, MidpointRounding.AwayFromZero) * step);
@@ -393,7 +471,6 @@ public partial class MainWindow : Window
         double dx = edge.X - center.X;
         double dy = edge.Y - center.Y;
         double r = Math.Max(3, Math.Sqrt(dx * dx + dy * dy));
-
         return FormattableString.Invariant(
             $"M {center.X - r:F2},{center.Y:F2} A {r:F2},{r:F2},0,1,0,{center.X + r:F2},{center.Y:F2} A {r:F2},{r:F2},0,1,0,{center.X - r:F2},{center.Y:F2} Z");
     }
@@ -415,8 +492,8 @@ public partial class MainWindow : Window
             $"M {cx:F2},{y1:F2} L {x1:F2},{y2:F2} L {x2:F2},{y2:F2} Z");
     }
 
-    private static string BuildLinePreview(Point p1, Point p2)
-        => FormattableString.Invariant($"M {p1.X:F2},{p1.Y:F2} L {p2.X:F2},{p2.Y:F2}");
+    private static string BuildLinePreview(Point p1, Point p2) =>
+        FormattableString.Invariant($"M {p1.X:F2},{p1.Y:F2} L {p2.X:F2},{p2.Y:F2}");
 
     // ══════════════════════════════════════════════
     //  СОБЫТИЯ ПАНЕЛИ СВОЙСТВ
@@ -424,7 +501,7 @@ public partial class MainWindow : Window
 
     private void ShapeNameBox_TextChanged(object? sender, TextChangedEventArgs e)
     {
-        if (sender is TextBox tb && VM.SelectedShape != null
+        if (sender is TextBox tb && VM.SelectedShape is not null
             && tb.Text != VM.SelectedShape.Name)
         {
             VM.SelectedShape.Name = tb.Text ?? "";
@@ -433,8 +510,14 @@ public partial class MainWindow : Window
 
     private void OpacitySlider_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
-        if (VM.SelectedShape != null)
+        if (VM.SelectedShape is not null)
             VM.SelectedShape.Opacity = e.NewValue;
+    }
+
+    private void StrokeWidthSlider_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (VM.SelectedShape is not null)
+            VM.SelectedShape.StrokeWidth = e.NewValue;
     }
 
     private void RotateLeft_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -443,11 +526,118 @@ public partial class MainWindow : Window
     private void RotateRight_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => VM.RotateSelected(15);
 
+    private void RotateLeft45_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => VM.RotateSelected(-45);
+
+    private void RotateRight45_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => VM.RotateSelected(45);
+
+    private void RotateLeft90_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => VM.RotateSelected(-90);
+
+    private void RotateRight90_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => VM.RotateSelected(90);
+
+    private void ScaleHalf_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        VM.SelectedShape?.Scale(0.5);
+    }
+
+    private void ScaleDouble_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        VM.SelectedShape?.Scale(2.0);
+    }
+
     private void MirrorX_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => VM.MirrorXSelected();
 
     private void MirrorY_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => VM.MirrorYSelected();
+
+    // ─── Ввод угла поворота ───
+    private void AngleBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        if (sender is TextBox tb && double.TryParse(tb.Text, out double angle))
+        {
+            VM.RotateSelected(angle);
+            tb.Text = "";
+            e.Handled = true;
+        }
+    }
+
+    private void ApplyAngle_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (double.TryParse(AngleBox.Text, out double angle))
+        {
+            VM.RotateSelected(angle);
+            AngleBox.Text = "";
+        }
+    }
+
+    // ─── Ввод hex-цвета ───
+    private void FillHexBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        if (sender is TextBox tb) TryApplyHexColor(tb.Text, isFill: true);
+    }
+
+    private void StrokeHexBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        if (sender is TextBox tb) TryApplyHexColor(tb.Text, isFill: false);
+    }
+
+    private void TryApplyHexColor(string? hex, bool isFill)
+    {
+        if (string.IsNullOrWhiteSpace(hex)) return;
+        try
+        {
+            // Добавляем # если пользователь не ввёл
+            if (!hex.StartsWith('#')) hex = "#" + hex;
+            var color = Color.Parse(hex);
+            if (isFill) VM.ApplyFillColor(color);
+            else VM.ApplyStrokeColor(color);
+            RebuildRecentColors();
+        }
+        catch { /* невалидный цвет — игнорируем */ }
+    }
+
+    // ─── Недавние цвета ───
+    private void RebuildRecentColors()
+    {
+        RecentColorsPanel.Children.Clear();
+        foreach (var color in VM.RecentColors)
+        {
+            var btn = new Button
+            {
+                Width = 20, Height = 20,
+                Margin = new Thickness(1),
+                Padding = new Thickness(0),
+                Background = new SolidColorBrush(color),
+                BorderBrush = new SolidColorBrush(Colors.Gray),
+                BorderThickness = new Thickness(1),
+            };
+            var c = color;
+            btn.Click += (_, _) =>
+            {
+                VM.ApplyFillColor(c);
+                RebuildRecentColors();
+            };
+            RecentColorsPanel.Children.Add(btn);
+        }
+    }
+
+    // ─── Шаг сетки ───
+    private void GridStepCombo_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (GridStepCombo.SelectedItem is ComboBoxItem item
+            && int.TryParse(item.Content?.ToString(), out int step))
+        {
+            VM.GridStep = step;
+            DrawGrid(step);
+        }
+    }
 
     // ─── Синхронизация UI при смене выделенной фигуры ───
     protected override void OnDataContextChanged(EventArgs e)
@@ -468,18 +658,17 @@ public partial class MainWindow : Window
         {
             Title = "Импортировать сцену",
             AllowMultiple = false,
-            FileTypeFilter = new List<FilePickerFileType>
-            {
-                new FilePickerFileType("JSON — данные редактора") { Patterns = new[] { "*.json" } },
-            }
+            FileTypeFilter =
+            [
+                new FilePickerFileType("JSON — данные редактора") { Patterns = ["*.json"] },
+            ]
         });
 
         if (files.Count == 0) return;
 
         try
         {
-            var path = files[0].Path.LocalPath;
-            VM.ImportJson(path);
+            VM.ImportJson(files[0].Path.LocalPath);
         }
         catch (Exception ex)
         {
@@ -511,23 +700,23 @@ public partial class MainWindow : Window
         {
             Title = "Экспортировать сцену",
             SuggestedFileName = "scene",
-            FileTypeChoices = new List<FilePickerFileType>
-            {
-                new FilePickerFileType("SVG — векторная графика") { Patterns = new[] { "*.svg" } },
-                new FilePickerFileType("PDF — документ")          { Patterns = new[] { "*.pdf" } },
-                new FilePickerFileType("JSON — данные редактора") { Patterns = new[] { "*.json" } },
-            }
+            FileTypeChoices =
+            [
+                new FilePickerFileType("SVG — векторная графика") { Patterns = ["*.svg"] },
+                new FilePickerFileType("PDF — документ")          { Patterns = ["*.pdf"] },
+                new FilePickerFileType("JSON — данные редактора") { Patterns = ["*.json"] },
+            ]
         });
 
-        if (file == null) return;
+        if (file is null) return;
 
         try
         {
             var path = file.Path.LocalPath;
             switch (System.IO.Path.GetExtension(path).ToLowerInvariant())
             {
-                case ".svg": SvgExporter.Export(VM.Shapes, path); break;
-                case ".pdf": PdfExporter.Export(VM.Shapes, path); break;
+                case ".svg":  SvgExporter.Export(VM.Shapes, path); break;
+                case ".pdf":  PdfExporter.Export(VM.Shapes, path); break;
                 case ".json": SceneSerializer.ExportJson(VM.Shapes, path); break;
             }
         }
@@ -550,7 +739,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // ─── Клик по фигуре внутри раскрытого слоя ───
+    // ─── Клик по фигуре в раскрытом слое ───
     private void LayerShape_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(DrawingCanvas).Properties.IsLeftButtonPressed) return;
@@ -561,7 +750,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // ─── Клик по имени слоя → делаем слой активным ───
+    // ─── Клик по имени слоя → делаем активным ───
     private void LayerName_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (sender is Avalonia.Controls.TextBlock tb && tb.DataContext is LayerViewModel layer)
@@ -584,20 +773,23 @@ public partial class MainWindow : Window
         {
             var shape = VM.SelectedShape;
             ShapeNameBox.Text = shape?.Name ?? "";
-            if (shape != null)
+            if (shape is not null)
+            {
                 OpacitySlider.Value = shape.Opacity;
+                StrokeWidthSlider.Value = shape.StrokeWidth;
+            }
 
             _suppressLayerComboChange = true;
-            LayerComboBox.SelectedItem = shape != null
+            LayerComboBox.SelectedItem = shape is not null
                 ? VM.Layers.FirstOrDefault(l => l.Name == shape.LayerName)
                 : null;
             _suppressLayerComboChange = false;
 
-            // Обновляем маркеры масштабирования и рамку выделения
-            if (_handleShape != null)
+            // Подписка на обновление маркеров
+            if (_handleShape is not null)
                 _handleShape.PropertyChanged -= OnHandleShapeChanged;
             _handleShape = shape;
-            if (_handleShape != null)
+            if (_handleShape is not null)
                 _handleShape.PropertyChanged += OnHandleShapeChanged;
             UpdateHandles(shape);
             UpdateSelectionRect(shape);
@@ -622,8 +814,9 @@ public partial class MainWindow : Window
     {
         base.OnKeyDown(e);
 
-        // Игнорируем, если фокус в TextBox
-        if (FocusManager?.GetFocusedElement() is TextBox) return;
+        // Игнорируем, когда фокус в поле ввода или комбобоксе
+        var focused = FocusManager?.GetFocusedElement();
+        if (focused is TextBox or ComboBox) return;
 
         if (e.KeyModifiers == KeyModifiers.Control)
         {
@@ -645,6 +838,11 @@ public partial class MainWindow : Window
                     VM.PasteClipboard();
                     e.Handled = true;
                     return;
+                case Key.D:
+                    VM.CopySelected();
+                    VM.PasteClipboard();
+                    e.Handled = true;
+                    return;
             }
         }
 
@@ -652,11 +850,11 @@ public partial class MainWindow : Window
 
         switch (e.Key)
         {
-            case Key.S: VM.CurrentTool = ToolType.Select; e.Handled = true; break;
-            case Key.C: VM.CurrentTool = ToolType.Circle; e.Handled = true; break;
+            case Key.S: VM.CurrentTool = ToolType.Select;    e.Handled = true; break;
+            case Key.C: VM.CurrentTool = ToolType.Circle;    e.Handled = true; break;
             case Key.R: VM.CurrentTool = ToolType.Rectangle; e.Handled = true; break;
-            case Key.T: VM.CurrentTool = ToolType.Triangle; e.Handled = true; break;
-            case Key.L: VM.CurrentTool = ToolType.Line; e.Handled = true; break;
+            case Key.T: VM.CurrentTool = ToolType.Triangle;  e.Handled = true; break;
+            case Key.L: VM.CurrentTool = ToolType.Line;      e.Handled = true; break;
         }
     }
 
@@ -679,7 +877,7 @@ public partial class MainWindow : Window
 
     private void UpdateSelectionRect(ShapeViewModel? shape)
     {
-        if (shape == null)
+        if (shape is null)
         {
             SelectionRect.IsVisible = false;
             return;

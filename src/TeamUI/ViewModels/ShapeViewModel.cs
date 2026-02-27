@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Avalonia;
@@ -60,7 +61,28 @@ public abstract class ShapeViewModel : INotifyPropertyChanged, ISceneShape
         set => SetField(ref _opacity, value);
     }
 
-    public double StrokeThickness => IsSelected ? 3.0 : 1.5;
+    // Толщина обводки, задаваемая пользователем
+    private double _strokeWidth = 1.5;
+    public double StrokeWidth
+    {
+        get => _strokeWidth;
+        set
+        {
+            if (SetField(ref _strokeWidth, Math.Clamp(value, 0.5, 10.0)))
+                OnPropertyChanged(nameof(StrokeThickness));
+        }
+    }
+
+    /// <summary>Итоговая толщина: выделенная фигура — не тоньше 3.0.</summary>
+    public double StrokeThickness => IsSelected ? Math.Max(StrokeWidth, 3.0) : StrokeWidth;
+
+    // Кумулятивный угол поворота (для отображения в панели свойств)
+    private double _rotationAngle;
+    public double RotationAngle
+    {
+        get => _rotationAngle;
+        set => SetField(ref _rotationAngle, value);
+    }
 
     private bool _isVisible = true;
     public bool IsVisible

@@ -3,53 +3,47 @@ using GraphicEditor.TeamTools.Shapes;
 
 namespace GraphicEditor.ViewModels;
 
-public class CircleViewModel : ShapeViewModel
+public class CircleViewModel(Circle circle) : ShapeViewModel
 {
-    private readonly Circle _circle;
-
-    public CircleViewModel(Circle circle)
-    {
-        _circle = circle;
-    }
-
     public override string ShapeType => "Circle";
-    public Circle Model => _circle;
+    public Circle Model => circle;
 
-    public override string Geometry => _circle.SerializedData;
+    public override string Geometry => circle.SerializedData;
 
-    public override Rect Bounds => new Rect(
-        _circle.Center.X - _circle.Radius,
-        _circle.Center.Y - _circle.Radius,
-        _circle.Radius * 2,
-        _circle.Radius * 2);
+    public override Rect Bounds => new(
+        circle.Center.X - circle.Radius,
+        circle.Center.Y - circle.Radius,
+        circle.Radius * 2,
+        circle.Radius * 2);
 
     public override void Move(Point delta)
     {
-        _circle.Move(delta);
+        circle.Move(delta);
         NotifyGeometryChanged();
     }
 
     public override void Scale(double ratio)
     {
-        _circle.Scale(ratio);
+        circle.Scale(ratio);
         NotifyGeometryChanged();
     }
 
     public override void Rotate(double angle)
     {
-        _circle.Rotate(angle);
+        RotationAngle += angle;
+        circle.Rotate(angle);
         NotifyGeometryChanged();
     }
 
     public override void MirrorX()
     {
-        _circle.MirrorX();
+        circle.MirrorX();
         NotifyGeometryChanged();
     }
 
     public override void MirrorY()
     {
-        _circle.MirrorY();
+        circle.MirrorY();
         NotifyGeometryChanged();
     }
 }

@@ -5,7 +5,10 @@ namespace GraphicEditor.TeamTools.Shapes;
 
 public class Line : Polygon
 {
-    public Line(Point p1, Point p2) : base(new Point[] { p1, p2 }) { }
+    public Line(Point p1, Point p2) : base([p1, p2]) { }
+
+    /// <summary>Конструктор с явным центром — для десериализации.</summary>
+    public Line(Point p1, Point p2, Point center) : base([p1, p2], center) { }
 
     public override string SerializedData
     {

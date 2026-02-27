@@ -2,17 +2,9 @@ using GraphicEditor.Common.Interfaces;
 
 namespace GraphicEditor.TeamCore.Commands;
 
-public class AddShapeCommand : IEditorCommand
+/// <summary>Команда добавления фигуры на сцену.</summary>
+public class AddShapeCommand(ISceneCollection collection, ISceneShape shape) : IEditorCommand
 {
-    private readonly ISceneCollection _collection;
-    private readonly ISceneShape _shape;
-
-    public AddShapeCommand(ISceneCollection collection, ISceneShape shape)
-    {
-        _collection = collection;
-        _shape = shape;
-    }
-
-    public void Execute() => _collection.Add(_shape);
-    public void Undo() => _collection.Remove(_shape);
+    public void Execute() => collection.Add(shape);
+    public void Undo() => collection.Remove(shape);
 }

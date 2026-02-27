@@ -5,10 +5,10 @@ using GraphicEditor.Common.Interfaces;
 
 namespace GraphicEditor.TeamCore;
 
-public class LayerManager
+/// <summary>Управление слоями: создание, удаление, видимость, активный слой.</summary>
+public class LayerManager(IEnumerable<ISceneShape> shapes)
 {
-    private readonly List<ILayer> _layers = new();
-    private readonly IEnumerable<ISceneShape> _shapes;
+    private readonly List<ILayer> _layers = [];
     private ILayer? _activeLayer;
 
     public event Action<ILayer>? LayerCreated;
@@ -16,15 +16,7 @@ public class LayerManager
     public IReadOnlyList<ILayer> Layers => _layers;
     public ILayer? ActiveLayer => _activeLayer;
 
-    public LayerManager(IEnumerable<ISceneShape> shapes)
-    {
-        _shapes = shapes;
-    }
-
-    public void Register(ILayer layer)
-    {
-        _layers.Add(layer);
-    }
+    public void Register(ILayer layer) => _layers.Add(layer);
 
     public bool Unregister(ILayer layer)
     {
@@ -35,9 +27,9 @@ public class LayerManager
 
     public void SetActive(ILayer layer)
     {
-        if (_activeLayer != null) _activeLayer.IsActive = false;
+        if (_activeLayer is not null) _activeLayer.IsActive = false;
         _activeLayer = layer;
-        if (_activeLayer != null) _activeLayer.IsActive = true;
+        if (_activeLayer is not null) _activeLayer.IsActive = true;
     }
 
     public ILayer? FindLayer(string name) =>
@@ -46,7 +38,7 @@ public class LayerManager
     public ILayer GetOrCreate(string name, Func<string, ILayer> factory)
     {
         var existing = FindLayer(name);
-        if (existing != null) return existing;
+        if (existing is not null) return existing;
 
         var newLayer = factory(name);
         _layers.Add(newLayer);
@@ -56,7 +48,7 @@ public class LayerManager
 
     public void ApplyVisibility(ILayer layer)
     {
-        foreach (var shape in _shapes)
+        foreach (var shape in shapes)
             if (shape.LayerName == layer.Name)
                 shape.IsVisible = layer.IsVisible;
     }
