@@ -3,7 +3,6 @@ using System.Windows.Input;
 
 namespace GraphicEditor.ViewModels;
 
-/// <summary>Простая команда без параметра.</summary>
 public class RelayCommand(Action execute, Func<bool>? canExecute = null) : ICommand
 {
     public event EventHandler? CanExecuteChanged;
@@ -15,7 +14,6 @@ public class RelayCommand(Action execute, Func<bool>? canExecute = null) : IComm
         CanExecuteChanged?.Invoke(this, EventArgs.Empty);
 }
 
-/// <summary>Типизированная команда с параметром.</summary>
 public class RelayCommand<T>(Action<T> execute, Func<T, bool>? canExecute = null) : ICommand
 {
     public event EventHandler? CanExecuteChanged;

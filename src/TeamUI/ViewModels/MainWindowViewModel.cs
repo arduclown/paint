@@ -30,40 +30,22 @@ public class MainWindowViewModel : INotifyPropertyChanged
         return true;
     }
 
-    // ───── Коллекция фигур (UI-слой) ─────
     public ObservableCollection<ShapeViewModel> Shapes { get; } = [];
-
-    // ───── Слои (UI-слой) ─────
     public ObservableCollection<LayerViewModel> Layers { get; } = [];
-
-    // ───── Недавние цвета ─────
     public ObservableCollection<Color> RecentColors { get; } = [];
 
-    // ───── Бекенд-менеджеры ─────
     private readonly SceneManager _scene;
     private readonly LayerManager _layerManager;
-
-    // ───── Сервис создания фигур ─────
     private readonly ShapeCreationService _shapeCreator = new();
-
-    // ───── Буфер обмена ─────
     private ShapeDto? _clipboard;
 
-    // ───── Привязка к сетке ─────
     private bool _snapEnabled;
     public bool SnapEnabled { get => _snapEnabled; set => SetField(ref _snapEnabled, value); }
 
-    // ───── Настраиваемый шаг сетки ─────
     private int _gridStep = 40;
-    public int GridStep
-    {
-        get => _gridStep;
-        set => SetField(ref _gridStep, value);
-    }
+    public int GridStep { get => _gridStep; set => SetField(ref _gridStep, value); }
 
-    // ───── Активный слой ─────
-    public LayerViewModel? ActiveLayer =>
-        (LayerViewModel?)_layerManager.ActiveLayer;
+    public LayerViewModel? ActiveLayer => (LayerViewModel?)_layerManager.ActiveLayer;
 
     public void SetActiveLayer(LayerViewModel layer)
     {
@@ -72,7 +54,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(StatusInfo));
     }
 
-    // ───── Выделенная фигура ─────
     private ShapeViewModel? _selectedShape;
     public ShapeViewModel? SelectedShape
     {
@@ -83,13 +64,35 @@ public class MainWindowViewModel : INotifyPropertyChanged
             SetField(ref _selectedShape, value);
             if (_selectedShape is not null) _selectedShape.IsSelected = true;
             OnPropertyChanged(nameof(HasSelection));
-            ((RelayCommand)DeleteCommand).RaiseCanExecuteChanged();
+            OnPropertyChanged(nameof(SelectedOpacity));
+            OnPropertyChanged(nameof(SelectedStrokeWidth));
+            RaiseAllCommands();
         }
     }
 
     public bool HasSelection => _selectedShape is not null;
 
-    // ───── Инструмент ─────
+    // Прокси-свойства для привязки слайдеров
+    public double SelectedOpacity
+    {
+        get => _selectedShape?.Opacity ?? 1.0;
+        set
+        {
+            if (_selectedShape is not null)
+                _selectedShape.Opacity = value;
+        }
+    }
+
+    public double SelectedStrokeWidth
+    {
+        get => _selectedShape?.StrokeWidth ?? 1.5;
+        set
+        {
+            if (_selectedShape is not null)
+                _selectedShape.StrokeWidth = value;
+        }
+    }
+
     private ToolType _currentTool = ToolType.Select;
     public ToolType CurrentTool
     {
@@ -140,10 +143,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
         set { if (value) CurrentTool = ToolType.Line; }
     }
 
-    // ───── Счётчик имён слоёв ─────
     private int _layerCount = 1;
 
-    // ───── Undo/Redo команды ─────
     public bool CanUndo => _scene.CanUndo;
     public bool CanRedo => _scene.CanRedo;
 
@@ -154,7 +155,26 @@ public class MainWindowViewModel : INotifyPropertyChanged
     public ICommand AddLayerCommand { get; }
     public ICommand DeleteLayerCommand { get; }
 
-    // ───── Активные цвета для новых фигур ─────
+    // Команды трансформации
+    public ICommand ScaleHalfCommand { get; }
+    public ICommand ScaleDoubleCommand { get; }
+    public ICommand MirrorXCommand { get; }
+    public ICommand MirrorYCommand { get; }
+    public ICommand ApplyAngleCommand { get; }
+
+    // Z-порядок
+    public ICommand BringToFrontCommand { get; }
+    public ICommand SendToBackCommand { get; }
+    public ICommand BringForwardCommand { get; }
+    public ICommand SendBackwardCommand { get; }
+
+    private string _angleInput = "";
+    public string AngleInput
+    {
+        get => _angleInput;
+        set => SetField(ref _angleInput, value);
+    }
+
     private Color _activeFillColor = Color.FromRgb(100, 149, 237);
     public Color ActiveFillColor
     {
@@ -169,7 +189,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
         set => SetField(ref _activeStrokeColor, value);
     }
 
-    // ───── Зум ─────
     private double _zoomFactor = 1.0;
     public double ZoomFactor
     {
@@ -181,7 +200,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    // ───── Статусная строка ─────
     private string _statusTool = "Выбор";
     public string StatusTool { get => _statusTool; set => SetField(ref _statusTool, value); }
 
@@ -189,11 +207,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
     public string StatusMouse { get => _statusMouse; set => SetField(ref _statusMouse, value); }
 
     public string StatusZoom => $"{(int)(_zoomFactor * 100)}%";
-    public string StatusCanvasSize => "1600 × 1200";
+    public string StatusCanvasSize => "1600 x 1200";
 
-    /// <summary>Информация в статусбаре: кол-во фигур + активный слой.</summary>
-    public string StatusInfo =>
-        $"Фигур: {Shapes.Count} | Слой: {ActiveLayer?.Name ?? "—"}";
+    public string StatusInfo => $"Фигур: {Shapes.Count} | Слой: {ActiveLayer?.Name ?? "—"}";
 
     public MainWindowViewModel()
     {
@@ -211,21 +227,29 @@ public class MainWindowViewModel : INotifyPropertyChanged
         AddLayerCommand = new RelayCommand(AddLayer);
         DeleteLayerCommand = new RelayCommand(DeleteLayer, () => Layers.Count > 1);
 
+        ScaleHalfCommand = new RelayCommand(() => _selectedShape?.Scale(0.5), () => HasSelection);
+        ScaleDoubleCommand = new RelayCommand(() => _selectedShape?.Scale(2.0), () => HasSelection);
+        MirrorXCommand = new RelayCommand(MirrorXSelected, () => HasSelection);
+        MirrorYCommand = new RelayCommand(MirrorYSelected, () => HasSelection);
+        ApplyAngleCommand = new RelayCommand(ApplyAngle, () => HasSelection);
+
+        BringToFrontCommand = new RelayCommand(BringToFront, () => HasSelection);
+        SendToBackCommand = new RelayCommand(SendToBack, () => HasSelection);
+        BringForwardCommand = new RelayCommand(BringForward, () => HasSelection);
+        SendBackwardCommand = new RelayCommand(SendBackward, () => HasSelection);
+
         var defaultLayer = new LayerViewModel { Name = "Слой 1" };
         RegisterLayer(defaultLayer);
         _layerManager.SetActive(defaultLayer);
         OnPropertyChanged(nameof(ActiveLayer));
     }
 
-    // ───── Создание фигуры ─────
     public ShapeViewModel CreateShape(ToolType tool, Point p1, Point p2) =>
         _shapeCreator.Create(
             tool, p1, p2,
             _activeFillColor, _activeStrokeColor,
             ActiveLayer?.Name ?? "Слой 1",
             ActiveLayer?.IsVisible ?? true);
-
-    // ───── Делегирование операций в SceneManager ─────
 
     public void AddShape(ShapeViewModel shape) =>
         ExecuteScene(() => _scene.Add(shape));
@@ -239,16 +263,58 @@ public class MainWindowViewModel : INotifyPropertyChanged
         ExecuteScene(() => _scene.Rotate(_selectedShape, angle));
     }
 
-    public void MirrorXSelected()
+    private void MirrorXSelected()
     {
         _selectedShape?.MirrorX();
         NotifyUndoRedo();
     }
 
-    public void MirrorYSelected()
+    private void MirrorYSelected()
     {
         _selectedShape?.MirrorY();
         NotifyUndoRedo();
+    }
+
+    private void ApplyAngle()
+    {
+        if (double.TryParse(_angleInput, out double angle))
+        {
+            RotateSelected(angle);
+            AngleInput = "";
+        }
+    }
+
+    // Z-порядок
+    private void BringToFront()
+    {
+        if (_selectedShape is null) return;
+        int idx = Shapes.IndexOf(_selectedShape);
+        if (idx < 0 || idx == Shapes.Count - 1) return;
+        Shapes.Move(idx, Shapes.Count - 1);
+    }
+
+    private void SendToBack()
+    {
+        if (_selectedShape is null) return;
+        int idx = Shapes.IndexOf(_selectedShape);
+        if (idx <= 0) return;
+        Shapes.Move(idx, 0);
+    }
+
+    private void BringForward()
+    {
+        if (_selectedShape is null) return;
+        int idx = Shapes.IndexOf(_selectedShape);
+        if (idx < 0 || idx == Shapes.Count - 1) return;
+        Shapes.Move(idx, idx + 1);
+    }
+
+    private void SendBackward()
+    {
+        if (_selectedShape is null) return;
+        int idx = Shapes.IndexOf(_selectedShape);
+        if (idx <= 0) return;
+        Shapes.Move(idx, idx - 1);
     }
 
     public void ApplyFillColor(Color color)
@@ -267,7 +333,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
         ExecuteScene(() => _scene.ChangeStyle(_selectedShape, _selectedShape.FillColor, color));
     }
 
-    /// <summary>Добавляет цвет в список недавних (максимум 8).</summary>
     private void AddRecentColor(Color color)
     {
         if (color == Colors.Transparent) return;
@@ -292,8 +357,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
         SelectedShape = null;
         NotifyUndoRedo();
     }
-
-    // ───── Управление слоями ─────
 
     private void AddLayer()
     {
@@ -334,8 +397,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
         _layerManager.MoveShapeToLayer(_selectedShape, target);
         target.Shapes.Add(_selectedShape);
     }
-
-    // ───── Синхронизация: фигуры <-> слои ─────
 
     private void OnShapesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -394,8 +455,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
             _layerManager.ApplyVisibility(layer);
     }
 
-    // ───── Импорт ─────
-
     public void ImportJson(string path)
     {
         if (!File.Exists(path)) return;
@@ -415,8 +474,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
             Shapes.Add(vm);
     }
 
-    // ───── Копирование / вставка ─────
-
     public void CopySelected()
     {
         if (_selectedShape is null) return;
@@ -429,7 +486,7 @@ public class MainWindowViewModel : INotifyPropertyChanged
         var clone = _clipboard.ToViewModel();
         if (clone is null) return;
 
-        clone.Name = _clipboard.Name + " (копия)";
+        clone.Name = $"{_clipboard.Name} (копия)";
         clone.Move(new Point(20, 20));
         clone.LayerName = ActiveLayer?.Name ?? "Слой 1";
         clone.IsVisible = ActiveLayer?.IsVisible ?? true;
@@ -437,7 +494,6 @@ public class MainWindowViewModel : INotifyPropertyChanged
         AddShape(clone);
         SelectedShape = clone;
 
-        // Обновляем буфер для каскадного смещения
         _clipboard = ShapeDto.FromViewModel(clone);
     }
 
@@ -453,5 +509,19 @@ public class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CanRedo));
         ((RelayCommand)UndoCommand).RaiseCanExecuteChanged();
         ((RelayCommand)RedoCommand).RaiseCanExecuteChanged();
+    }
+
+    private void RaiseAllCommands()
+    {
+        ((RelayCommand)DeleteCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)ScaleHalfCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)ScaleDoubleCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)MirrorXCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)MirrorYCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)ApplyAngleCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)BringToFrontCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)SendToBackCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)BringForwardCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)SendBackwardCommand).RaiseCanExecuteChanged();
     }
 }

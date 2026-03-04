@@ -2,7 +2,6 @@ using GraphicEditor.TeamTools.Shapes;
 
 namespace GraphicEditor.ViewModels;
 
-/// <summary>Создаёт ViewModel-обёртки вокруг доменных объектов фигур.</summary>
 public static class ShapeViewModelFactory
 {
     public static CircleViewModel CreateCircle(Circle circle, string name) =>

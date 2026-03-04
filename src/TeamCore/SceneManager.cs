@@ -5,7 +5,6 @@ using GraphicEditor.TeamCore.Commands;
 
 namespace GraphicEditor.TeamCore;
 
-/// <summary>Фасад над CommandManager — управляет сценой через команды с Undo/Redo.</summary>
 public class SceneManager(ISceneCollection shapes)
 {
     private readonly CommandManager _commandManager = new();

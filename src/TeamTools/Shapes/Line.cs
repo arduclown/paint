@@ -1,4 +1,4 @@
-using System.Globalization;
+using System;
 using Avalonia;
 
 namespace GraphicEditor.TeamTools.Shapes;
@@ -7,17 +7,15 @@ public class Line : Polygon
 {
     public Line(Point p1, Point p2) : base([p1, p2]) { }
 
-    /// <summary>Конструктор с явным центром — для десериализации.</summary>
     public Line(Point p1, Point p2, Point center) : base([p1, p2], center) { }
 
     public override string SerializedData
     {
         get
         {
-            var ci = CultureInfo.InvariantCulture;
             var pts = Points;
-            return string.Format(ci, "M {0:F2},{1:F2} L {2:F2},{3:F2}",
-                pts[0].X, pts[0].Y, pts[1].X, pts[1].Y);
+            return FormattableString.Invariant(
+                $"M {pts[0].X:F2},{pts[0].Y:F2} L {pts[1].X:F2},{pts[1].Y:F2}");
         }
     }
 }

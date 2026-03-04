@@ -7,7 +7,6 @@ using GraphicEditor.ViewModels;
 
 namespace GraphicEditor.TeamImport;
 
-/// <summary>Экспорт сцены в формат SVG.</summary>
 public static class SvgExporter
 {
     public static void Export(IEnumerable<ShapeViewModel> shapes, string path)
@@ -33,10 +32,11 @@ public static class SvgExporter
                 : (fc.A / 255.0 * shape.Opacity).ToString("F3", CultureInfo.InvariantCulture);
 
             var stroke = FormattableString.Invariant($"#{sc.R:X2}{sc.G:X2}{sc.B:X2}");
+            var strokeOp = (sc.A / 255.0 * shape.Opacity).ToString("F3", CultureInfo.InvariantCulture);
             var strokeW = shape.StrokeWidth.ToString("F1", CultureInfo.InvariantCulture);
 
             sb.AppendLine(
-                $"""  <path d="{shape.Geometry}" fill="{fill}" fill-opacity="{fillOp}" stroke="{stroke}" stroke-width="{strokeW}" />""");
+                $"""  <path d="{shape.Geometry}" fill="{fill}" fill-opacity="{fillOp}" stroke="{stroke}" stroke-opacity="{strokeOp}" stroke-width="{strokeW}" />""");
         }
 
         sb.AppendLine("</svg>");

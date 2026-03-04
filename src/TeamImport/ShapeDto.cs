@@ -1,4 +1,3 @@
-using System;
 using Avalonia;
 using Avalonia.Media;
 using GraphicEditor.TeamTools.Shapes;
@@ -6,13 +5,8 @@ using GraphicEditor.ViewModels;
 
 namespace GraphicEditor.TeamImport;
 
-/// <summary>
-/// DTO для сериализации/десериализации фигур в JSON.
-/// Новые поля имеют значения по умолчанию — старые файлы загружаются без проблем.
-/// </summary>
 public record ShapeDto
 {
-    // Базовые свойства
     public string Type { get; init; } = "";
     public string Name { get; init; } = "";
     public string FillColor { get; init; } = "#FF6495ED";
@@ -20,25 +14,18 @@ public record ShapeDto
     public double Opacity { get; init; } = 1.0;
     public string LayerName { get; init; } = "Слой 1";
     public bool IsVisible { get; init; } = true;
-
-    // Толщина обводки и угол поворота
     public double StrokeWidth { get; init; } = 1.5;
     public double RotationAngle { get; init; }
 
-    // Для Circle
     public double CenterX { get; init; }
     public double CenterY { get; init; }
     public double Radius { get; init; }
 
-    // Для Polygon (Rectangle, Triangle, Line)
     public double[]? PointsX { get; init; }
     public double[]? PointsY { get; init; }
-
-    // Стабильный центр вращения полигона (null = вычислить заново)
     public double? RotationCenterX { get; init; }
     public double? RotationCenterY { get; init; }
 
-    /// <summary>Собирает DTO из ViewModel.</summary>
     public static ShapeDto FromViewModel(ShapeViewModel vm)
     {
         var dto = new ShapeDto
@@ -87,13 +74,11 @@ public record ShapeDto
         return dto;
     }
 
-    /// <summary>Восстанавливает ViewModel из DTO.</summary>
     public ShapeViewModel? ToViewModel()
     {
         var fill = ParseColor(FillColor);
         var stroke = ParseColor(StrokeColor);
 
-        // Если сохранён центр вращения — передаём его в конструктор
         Point? savedCenter = RotationCenterX.HasValue && RotationCenterY.HasValue
             ? new Point(RotationCenterX.Value, RotationCenterY.Value)
             : null;
@@ -119,7 +104,6 @@ public record ShapeDto
                             new Point(PointsX[3], PointsY[3])),
                     "Rectangle"),
 
-            // Обратная совместимость: старые JSON с 2 точками прямоугольника
             "Rectangle" when PointsX?.Length >= 2 && PointsY?.Length >= 2 =>
                 new PolygonViewModel(
                     new Rectangle(
@@ -171,7 +155,6 @@ public record ShapeDto
         return vm;
     }
 
-    // Вспомогательный метод — чтобы не дублировать обёртку
     private PolygonViewModel CreatePolygonVm(Polygon polygon, string type) =>
         new(polygon, type, Name);
 

@@ -3,10 +3,6 @@ using GraphicEditor.Common.Interfaces;
 
 namespace GraphicEditor.ViewModels;
 
-/// <summary>
-/// Адаптер: оборачивает ObservableCollection как ISceneCollection,
-/// чтобы команды из TeamCore работали с UI-коллекцией без прямой зависимости.
-/// </summary>
 public class ShapeCollectionAdapter(ObservableCollection<ShapeViewModel> inner) : ISceneCollection
 {
     public void Add(ISceneShape shape) => inner.Add((ShapeViewModel)shape);

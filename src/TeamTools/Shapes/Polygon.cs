@@ -4,26 +4,17 @@ using GraphicEditor.Common.Interfaces;
 
 namespace GraphicEditor.TeamTools.Shapes;
 
-/// <summary>
-/// Базовый класс для полигональных фигур.
-/// Хранит стабильный центр вращения — настоящий центроид,
-/// который не дрейфует при повторных поворотах.
-/// </summary>
 public abstract class Polygon : IShape
 {
     private Point[] _points;
-
-    // Стабильный центр вращения/масштабирования (центроид)
     private Point _center;
 
     public Point[] Points => _points;
-
-    /// <summary>Центр вращения (центроид точек).</summary>
     public Point Center => _center;
 
     protected Polygon(Point[] points)
     {
-        if (points is null) throw new ArgumentNullException(nameof(points));
+        ArgumentNullException.ThrowIfNull(points);
         if (points.Length == 0)
             throw new ArgumentException("Коллекция точек не должна быть пустой", nameof(points));
 
@@ -31,10 +22,9 @@ public abstract class Polygon : IShape
         _center = ComputeCentroid(points);
     }
 
-    /// <summary>Конструктор с явным центром — для десериализации.</summary>
     protected Polygon(Point[] points, Point center)
     {
-        if (points is null) throw new ArgumentNullException(nameof(points));
+        ArgumentNullException.ThrowIfNull(points);
         if (points.Length == 0)
             throw new ArgumentException("Коллекция точек не должна быть пустой", nameof(points));
 
@@ -44,7 +34,6 @@ public abstract class Polygon : IShape
 
     public abstract string SerializedData { get; }
 
-    /// <summary>Вычисляет центроид как среднее арифметическое всех точек.</summary>
     private static Point ComputeCentroid(Point[] pts)
     {
         double sx = 0, sy = 0;

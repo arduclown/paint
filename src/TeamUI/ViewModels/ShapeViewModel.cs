@@ -61,7 +61,6 @@ public abstract class ShapeViewModel : INotifyPropertyChanged, ISceneShape
         set => SetField(ref _opacity, value);
     }
 
-    // Толщина обводки, задаваемая пользователем
     private double _strokeWidth = 1.5;
     public double StrokeWidth
     {
@@ -73,10 +72,8 @@ public abstract class ShapeViewModel : INotifyPropertyChanged, ISceneShape
         }
     }
 
-    /// <summary>Итоговая толщина: выделенная фигура — не тоньше 3.0.</summary>
     public double StrokeThickness => IsSelected ? Math.Max(StrokeWidth, 3.0) : StrokeWidth;
 
-    // Кумулятивный угол поворота (для отображения в панели свойств)
     private double _rotationAngle;
     public double RotationAngle
     {

@@ -5,10 +5,6 @@ using GraphicEditor.TeamCore;
 
 namespace GraphicEditor.ViewModels;
 
-// Координирует полный цикл создания фигуры:
-//   1) бекенд (ShapeFactory) строит доменный объект IShape
-//   2) фронт (ShapeViewModelFactory) оборачивает его в ViewModel
-//   3) применяется UI-контекст (цвет, слой, имя)
 public class ShapeCreationService
 {
     private int _circleCount, _rectCount, _triCount, _lineCount;

@@ -8,7 +8,6 @@ namespace GraphicEditor.TeamImport;
 
 public static class SceneSerializer
 {
-    // Настройки сериализации — создаём один раз
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public static void ExportJson(IEnumerable<ShapeViewModel> shapes, string path)

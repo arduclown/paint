@@ -1,10 +1,7 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -19,34 +16,27 @@ public partial class MainWindow : Window
 {
     private MainWindowViewModel VM => (DataContext as MainWindowViewModel)!;
 
-    // ─── Состояние рисования ───
     private bool _isDrawing;
     private Point _drawStart;
 
-    // ─── Состояние перетаскивания ───
     private bool _isDragging;
     private ShapeViewModel? _dragTarget;
     private Point _dragLastPos;
 
-    // ─── Состояние масштабирования маркерами ───
     private bool _isResizing;
     private Point _resizeCenter;
     private double _resizeStartDist;
     private double _resizeLastRatio;
 
-    // ─── Состояние интерактивного поворота мышью ───
     private bool _isRotating;
     private double _rotateStartAngle;
 
-    // ─── Маркеры масштабирования (квадраты 8x8) ───
     private readonly Avalonia.Controls.Shapes.Rectangle[] _handles = new Avalonia.Controls.Shapes.Rectangle[4];
     private ShapeViewModel? _handleShape;
 
-    // ─── Маркер поворота (зелёный кружок + линия-стебель) ───
     private Ellipse? _rotationHandle;
     private Line? _rotationLine;
 
-    // ─── Палитра цветов ───
     private static readonly (Color color, string name)[] Palette =
     [
         (Colors.CornflowerBlue,  "Голубой"),
@@ -65,8 +55,8 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
-        InitializeComponent();
         DataContext = new MainWindowViewModel();
+        InitializeComponent();
         Loaded += MainWindow_Loaded;
     }
 
@@ -78,7 +68,6 @@ public partial class MainWindow : Window
         InitHandles();
     }
 
-    // ─── Строим палитру цветов ───
     private void BuildColorPalette(WrapPanel panel, bool isFill)
     {
         foreach (var (color, name) in Palette)
@@ -95,7 +84,6 @@ public partial class MainWindow : Window
             };
             ToolTip.SetTip(btn, name);
 
-            // Для "Без заливки" — крестик
             if (color == Colors.Transparent)
             {
                 btn.Content = new TextBlock
@@ -120,9 +108,9 @@ public partial class MainWindow : Window
         }
     }
 
-    // ─── Рисуем сетку на GridCanvas ───
     private void DrawGrid(double step)
     {
+        if (GridCanvas is null) return;
         GridCanvas.Children.Clear();
 
         const double w = 1600, h = 1200;
@@ -133,24 +121,17 @@ public partial class MainWindow : Window
         for (double y = 0; y <= h; y += step)
             geomGroup.Children.Add(new LineGeometry(new Point(0, y), new Point(w, y)));
 
-        var gridPath = new Avalonia.Controls.Shapes.Path
+        GridCanvas.Children.Add(new Avalonia.Controls.Shapes.Path
         {
             Data = geomGroup,
             Stroke = new SolidColorBrush(Color.FromArgb(35, 150, 150, 150)),
             StrokeThickness = 0.5,
             IsHitTestVisible = false,
-        };
-
-        GridCanvas.Children.Add(gridPath);
+        });
     }
-
-    // ══════════════════════════════════════════════
-    //  МАРКЕРЫ МАСШТАБИРОВАНИЯ + ПОВОРОТА
-    // ══════════════════════════════════════════════
 
     private void InitHandles()
     {
-        // 4 квадратных маркера ресайза
         for (int i = 0; i < 4; i++)
         {
             var h = new Avalonia.Controls.Shapes.Rectangle
@@ -167,7 +148,6 @@ public partial class MainWindow : Window
             HandlesCanvas.Children.Add(h);
         }
 
-        // Линия-стебель от фигуры к маркеру поворота
         _rotationLine = new Line
         {
             Stroke = new SolidColorBrush(Color.FromRgb(80, 200, 80)),
@@ -177,7 +157,6 @@ public partial class MainWindow : Window
         };
         HandlesCanvas.Children.Add(_rotationLine);
 
-        // Зелёный кружок — маркер поворота
         _rotationHandle = new Ellipse
         {
             Width = 12, Height = 12,
@@ -202,7 +181,6 @@ public partial class MainWindow : Window
         }
 
         var b = shape.Bounds;
-        // Порядок маркеров: TL, TR, BR, BL
         double[] xs = [b.Left, b.Right, b.Right, b.Left];
         double[] ys = [b.Top, b.Top, b.Bottom, b.Bottom];
 
@@ -213,7 +191,6 @@ public partial class MainWindow : Window
             _handles[i].IsVisible = true;
         }
 
-        // Маркер поворота — сверху по центру
         if (_rotationHandle is not null && _rotationLine is not null)
         {
             double cx = b.Left + b.Width / 2.0;
@@ -266,10 +243,6 @@ public partial class MainWindow : Window
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
-    // ══════════════════════════════════════════════
-    //  SHIFT-ОГРАНИЧЕНИЕ ПРИ РИСОВАНИИ
-    // ══════════════════════════════════════════════
-
     private static Point ApplyShiftConstraint(ToolType tool, Point start, Point current)
     {
         double dx = current.X - start.X;
@@ -297,17 +270,10 @@ public partial class MainWindow : Window
         }
     }
 
-    // ══════════════════════════════════════════════
-    //  СОБЫТИЯ ХОЛСТА
-    // ══════════════════════════════════════════════
-
     private void Canvas_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(DrawingCanvas).Properties.IsLeftButtonPressed) return;
-
-        // Перехватываем фокус на канвас
         DrawingCanvas.Focus();
-
         var pos = e.GetPosition(DrawingCanvas);
 
         if (VM.CurrentTool == ToolType.Select)
@@ -317,7 +283,6 @@ public partial class MainWindow : Window
         }
 
         if (VM.ActiveLayer?.IsLocked == true) return;
-
         if (VM.SnapEnabled) pos = SnapToGrid(pos);
 
         _isDrawing = true;
@@ -341,13 +306,11 @@ public partial class MainWindow : Window
         }
         else if (_isRotating && VM.SelectedShape is not null)
         {
-            // Интерактивный поворот мышью
             var b = VM.SelectedShape.Bounds;
             var center = new Point(b.X + b.Width / 2, b.Y + b.Height / 2);
             double currentAngle = Math.Atan2(pos.Y - center.Y, pos.X - center.X) * 180.0 / Math.PI;
             double delta = currentAngle - _rotateStartAngle;
 
-            // Shift — привязка к шагу 15°
             if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
                 delta = Math.Round(delta / 15.0) * 15.0;
 
@@ -418,7 +381,6 @@ public partial class MainWindow : Window
         }
     }
 
-    // ─── Клик по фигуре ───
     private void Shape_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(DrawingCanvas).Properties.IsLeftButtonPressed) return;
@@ -426,20 +388,18 @@ public partial class MainWindow : Window
         if (sender is Avalonia.Controls.Shapes.Path path
             && path.DataContext is ShapeViewModel vm)
         {
-            if (VM.CurrentTool == ToolType.Select)
-            {
-                VM.SelectedShape = vm;
+            // Клик по фигуре всегда выделяет и начинает перетаскивание
+            VM.SelectedShape = vm;
+            VM.CurrentTool = ToolType.Select;
 
-                _isDragging = true;
-                _dragTarget = vm;
-                _dragLastPos = e.GetPosition(DrawingCanvas);
-                e.Pointer.Capture(DrawingCanvas);
-                e.Handled = true;
-            }
+            _isDragging = true;
+            _dragTarget = vm;
+            _dragLastPos = e.GetPosition(DrawingCanvas);
+            e.Pointer.Capture(DrawingCanvas);
+            e.Handled = true;
         }
     }
 
-    // ─── Превью фигуры при рисовании ───
     private void UpdatePreview(Point current)
     {
         string? pathData = VM.CurrentTool switch
@@ -495,10 +455,6 @@ public partial class MainWindow : Window
     private static string BuildLinePreview(Point p1, Point p2) =>
         FormattableString.Invariant($"M {p1.X:F2},{p1.Y:F2} L {p2.X:F2},{p2.Y:F2}");
 
-    // ══════════════════════════════════════════════
-    //  СОБЫТИЯ ПАНЕЛИ СВОЙСТВ
-    // ══════════════════════════════════════════════
-
     private void ShapeNameBox_TextChanged(object? sender, TextChangedEventArgs e)
     {
         if (sender is TextBox tb && VM.SelectedShape is not null
@@ -508,102 +464,15 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OpacitySlider_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
-    {
-        if (VM.SelectedShape is not null)
-            VM.SelectedShape.Opacity = e.NewValue;
-    }
-
-    private void StrokeWidthSlider_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
-    {
-        if (VM.SelectedShape is not null)
-            VM.SelectedShape.StrokeWidth = e.NewValue;
-    }
-
-    private void RotateLeft_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => VM.RotateSelected(-15);
-
-    private void RotateRight_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => VM.RotateSelected(15);
-
-    private void RotateLeft45_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => VM.RotateSelected(-45);
-
-    private void RotateRight45_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => VM.RotateSelected(45);
-
-    private void RotateLeft90_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => VM.RotateSelected(-90);
-
-    private void RotateRight90_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => VM.RotateSelected(90);
-
-    private void ScaleHalf_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        VM.SelectedShape?.Scale(0.5);
-    }
-
-    private void ScaleDouble_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        VM.SelectedShape?.Scale(2.0);
-    }
-
-    private void MirrorX_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => VM.MirrorXSelected();
-
-    private void MirrorY_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => VM.MirrorYSelected();
-
-    // ─── Ввод угла поворота ───
     private void AngleBox_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter) return;
-        if (sender is TextBox tb && double.TryParse(tb.Text, out double angle))
+        if (e.Key == Key.Enter)
         {
-            VM.RotateSelected(angle);
-            tb.Text = "";
+            VM.ApplyAngleCommand.Execute(null);
             e.Handled = true;
         }
     }
 
-    private void ApplyAngle_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (double.TryParse(AngleBox.Text, out double angle))
-        {
-            VM.RotateSelected(angle);
-            AngleBox.Text = "";
-        }
-    }
-
-    // ─── Ввод hex-цвета ───
-    private void FillHexBox_KeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter) return;
-        if (sender is TextBox tb) TryApplyHexColor(tb.Text, isFill: true);
-    }
-
-    private void StrokeHexBox_KeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter) return;
-        if (sender is TextBox tb) TryApplyHexColor(tb.Text, isFill: false);
-    }
-
-    private void TryApplyHexColor(string? hex, bool isFill)
-    {
-        if (string.IsNullOrWhiteSpace(hex)) return;
-        try
-        {
-            // Добавляем # если пользователь не ввёл
-            if (!hex.StartsWith('#')) hex = "#" + hex;
-            var color = Color.Parse(hex);
-            if (isFill) VM.ApplyFillColor(color);
-            else VM.ApplyStrokeColor(color);
-            RebuildRecentColors();
-        }
-        catch { /* невалидный цвет — игнорируем */ }
-    }
-
-    // ─── Недавние цвета ───
     private void RebuildRecentColors()
     {
         RecentColorsPanel.Children.Clear();
@@ -628,28 +497,23 @@ public partial class MainWindow : Window
         }
     }
 
-    // ─── Шаг сетки ───
     private void GridStepCombo_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (GridStepCombo.SelectedItem is ComboBoxItem item
+        if (DataContext is not MainWindowViewModel vm) return;
+        if (sender is ComboBox combo && combo.SelectedItem is ComboBoxItem item
             && int.TryParse(item.Content?.ToString(), out int step))
         {
-            VM.GridStep = step;
+            vm.GridStep = step;
             DrawGrid(step);
         }
     }
 
-    // ─── Синхронизация UI при смене выделенной фигуры ───
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
         if (DataContext is MainWindowViewModel vm)
             vm.PropertyChanged += ViewModel_PropertyChanged;
     }
-
-    // ══════════════════════════════════════════════
-    //  ИМПОРТ (JSON)
-    // ══════════════════════════════════════════════
 
     private async void ImportButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
@@ -660,7 +524,7 @@ public partial class MainWindow : Window
             AllowMultiple = false,
             FileTypeFilter =
             [
-                new FilePickerFileType("JSON — данные редактора") { Patterns = ["*.json"] },
+                new FilePickerFileType("JSON") { Patterns = ["*.json"] },
             ]
         });
 
@@ -689,10 +553,6 @@ public partial class MainWindow : Window
         }
     }
 
-    // ══════════════════════════════════════════════
-    //  ЭКСПОРТ (SVG / PDF / JSON)
-    // ══════════════════════════════════════════════
-
     private async void ExportButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         var topLevel = TopLevel.GetTopLevel(this)!;
@@ -702,9 +562,9 @@ public partial class MainWindow : Window
             SuggestedFileName = "scene",
             FileTypeChoices =
             [
-                new FilePickerFileType("SVG — векторная графика") { Patterns = ["*.svg"] },
-                new FilePickerFileType("PDF — документ")          { Patterns = ["*.pdf"] },
-                new FilePickerFileType("JSON — данные редактора") { Patterns = ["*.json"] },
+                new FilePickerFileType("SVG") { Patterns = ["*.svg"] },
+                new FilePickerFileType("PDF") { Patterns = ["*.pdf"] },
+                new FilePickerFileType("JSON") { Patterns = ["*.json"] },
             ]
         });
 
@@ -739,7 +599,6 @@ public partial class MainWindow : Window
         }
     }
 
-    // ─── Клик по фигуре в раскрытом слое ───
     private void LayerShape_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(DrawingCanvas).Properties.IsLeftButtonPressed) return;
@@ -750,7 +609,6 @@ public partial class MainWindow : Window
         }
     }
 
-    // ─── Клик по имени слоя → делаем активным ───
     private void LayerName_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (sender is Avalonia.Controls.TextBlock tb && tb.DataContext is LayerViewModel layer)
@@ -773,11 +631,6 @@ public partial class MainWindow : Window
         {
             var shape = VM.SelectedShape;
             ShapeNameBox.Text = shape?.Name ?? "";
-            if (shape is not null)
-            {
-                OpacitySlider.Value = shape.Opacity;
-                StrokeWidthSlider.Value = shape.StrokeWidth;
-            }
 
             _suppressLayerComboChange = true;
             LayerComboBox.SelectedItem = shape is not null
@@ -785,7 +638,6 @@ public partial class MainWindow : Window
                 : null;
             _suppressLayerComboChange = false;
 
-            // Подписка на обновление маркеров
             if (_handleShape is not null)
                 _handleShape.PropertyChanged -= OnHandleShapeChanged;
             _handleShape = shape;
@@ -806,15 +658,10 @@ public partial class MainWindow : Window
         }
     }
 
-    // ══════════════════════════════════════════════
-    //  ГОРЯЧИЕ КЛАВИШИ
-    // ══════════════════════════════════════════════
-
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
 
-        // Игнорируем, когда фокус в поле ввода или комбобоксе
         var focused = FocusManager?.GetFocusedElement();
         if (focused is TextBox or ComboBox) return;
 
@@ -858,22 +705,12 @@ public partial class MainWindow : Window
         }
     }
 
-    // ══════════════════════════════════════════════
-    //  ЗУМ (Ctrl + колёсико мыши)
-    // ══════════════════════════════════════════════
-
     private void Canvas_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
         if (!e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
-
-        double delta = e.Delta.Y > 0 ? 0.1 : -0.1;
-        VM.ZoomFactor += delta;
+        VM.ZoomFactor += e.Delta.Y > 0 ? 0.1 : -0.1;
         e.Handled = true;
     }
-
-    // ══════════════════════════════════════════════
-    //  ПУНКТИРНАЯ РАМКА ВЫДЕЛЕНИЯ
-    // ══════════════════════════════════════════════
 
     private void UpdateSelectionRect(ShapeViewModel? shape)
     {

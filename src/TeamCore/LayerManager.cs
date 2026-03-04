@@ -5,7 +5,6 @@ using GraphicEditor.Common.Interfaces;
 
 namespace GraphicEditor.TeamCore;
 
-/// <summary>Управление слоями: создание, удаление, видимость, активный слой.</summary>
 public class LayerManager(IEnumerable<ISceneShape> shapes)
 {
     private readonly List<ILayer> _layers = [];

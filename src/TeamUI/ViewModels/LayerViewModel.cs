@@ -48,5 +48,5 @@ public class LayerViewModel : INotifyPropertyChanged, ILayer
         set => SetField(ref _isActive, value);
     }
 
-    public ObservableCollection<ShapeViewModel> Shapes { get; } = new();
+    public ObservableCollection<ShapeViewModel> Shapes { get; } = [];
 }
