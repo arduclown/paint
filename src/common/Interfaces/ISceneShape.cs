@@ -12,6 +12,7 @@ public interface ISceneShape
 
     void Move(Point delta);
     void Scale(double ratio);
+    void Scale(double ratioX, double ratioY);
     void Rotate(double angle);
     void MirrorX();
     void MirrorY();

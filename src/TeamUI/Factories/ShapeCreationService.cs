@@ -1,41 +1,27 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Media;
 using GraphicEditor.Common.Models;
-using GraphicEditor.TeamCore;
 
 namespace GraphicEditor.ViewModels;
 
 public class ShapeCreationService
 {
-    private int _circleCount, _rectCount, _triCount, _lineCount;
+    private readonly Dictionary<ToolType, int> _counters = [];
 
     public ShapeViewModel Create(
         ToolType tool, Point p1, Point p2,
         Color fill, Color stroke,
         string layerName, bool isVisible)
     {
-        ShapeViewModel vm = tool switch
-        {
-            ToolType.Circle =>
-                ShapeViewModelFactory.CreateCircle(
-                    ShapeFactory.CreateCircle(p1, p2),
-                    $"Круг {++_circleCount}"),
+        var descriptor = ShapeRegistry.GetByTool(tool)
+            ?? throw new ArgumentException($"Unknown tool: {tool}");
 
-            ToolType.Rectangle =>
-                ShapeViewModelFactory.CreateRectangle(
-                    ShapeFactory.CreateRectangle(p1, p2),
-                    $"Прямоугольник {++_rectCount}"),
-
-            ToolType.Triangle =>
-                ShapeViewModelFactory.CreateTriangle(
-                    ShapeFactory.CreateTriangle(p1, p2),
-                    $"Треугольник {++_triCount}"),
-
-            _ =>
-                ShapeViewModelFactory.CreateLine(
-                    ShapeFactory.CreateLine(p1, p2),
-                    $"Линия {++_lineCount}"),
-        };
+        var model = descriptor.CreateModel(p1, p2);
+        var name = NextName(tool);
+        var vm = descriptor.CreateViewModel(model, name);
 
         vm.FillColor = fill;
         vm.StrokeColor = stroke;
@@ -44,6 +30,15 @@ public class ShapeCreationService
         return vm;
     }
 
-    public void ResetCounters() =>
-        _circleCount = _rectCount = _triCount = _lineCount = 0;
+    public string NextName(ToolType tool)
+    {
+        if (!_counters.ContainsKey(tool)) _counters[tool] = 0;
+        return $"{ShapeRegistry.GetDisplayName(tool)} {++_counters[tool]}";
+    }
+
+    public void ResetCounters()
+    {
+        foreach (var key in _counters.Keys.ToList())
+            _counters[key] = 0;
+    }
 }

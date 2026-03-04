@@ -22,8 +22,6 @@ public static class PdfExporter
             using var skPath = SKPath.ParseSvgPathData(shape.Geometry);
             if (skPath is null) continue;
 
-            byte alpha = (byte)(255 * shape.Opacity);
-
             var fc = shape.FillColor;
             if (fc.A > 0)
             {

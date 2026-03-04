@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using Avalonia;
 using GraphicEditor.Common.Interfaces;
 
@@ -32,7 +33,22 @@ public abstract class Polygon : IShape
         _center = center;
     }
 
-    public abstract string SerializedData { get; }
+    protected virtual bool IsClosed => true;
+
+    public string SerializedData
+    {
+        get
+        {
+            var pts = _points;
+            var sb = new StringBuilder();
+            sb.Append(FormattableString.Invariant($"M {pts[0].X:F2},{pts[0].Y:F2}"));
+            for (int i = 1; i < pts.Length; i++)
+                sb.Append(FormattableString.Invariant($" L {pts[i].X:F2},{pts[i].Y:F2}"));
+            if (IsClosed)
+                sb.Append(" Z");
+            return sb.ToString();
+        }
+    }
 
     private static Point ComputeCentroid(Point[] pts)
     {
@@ -57,6 +73,17 @@ public abstract class Polygon : IShape
             _points[i] = new Point(
                 _center.X + (_points[i].X - _center.X) * ratio,
                 _center.Y + (_points[i].Y - _center.Y) * ratio);
+    }
+
+    public void Scale(double ratioX, double ratioY)
+    {
+        if (ratioX == 0) throw new ArgumentOutOfRangeException(nameof(ratioX));
+        if (ratioY == 0) throw new ArgumentOutOfRangeException(nameof(ratioY));
+
+        for (int i = 0; i < _points.Length; i++)
+            _points[i] = new Point(
+                _center.X + (_points[i].X - _center.X) * ratioX,
+                _center.Y + (_points[i].Y - _center.Y) * ratioY);
     }
 
     public void Rotate(double angle)

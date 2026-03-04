@@ -11,10 +11,10 @@ public class CircleViewModel(Circle circle) : ShapeViewModel
     public override string Geometry => circle.SerializedData;
 
     public override Rect Bounds => new(
-        circle.Center.X - circle.Radius,
-        circle.Center.Y - circle.Radius,
-        circle.Radius * 2,
-        circle.Radius * 2);
+        circle.Center.X - circle.RadiusX,
+        circle.Center.Y - circle.RadiusY,
+        circle.RadiusX * 2,
+        circle.RadiusY * 2);
 
     public override void Move(Point delta)
     {
@@ -25,6 +25,12 @@ public class CircleViewModel(Circle circle) : ShapeViewModel
     public override void Scale(double ratio)
     {
         circle.Scale(ratio);
+        NotifyGeometryChanged();
+    }
+
+    public override void Scale(double ratioX, double ratioY)
+    {
+        circle.Scale(ratioX, ratioY);
         NotifyGeometryChanged();
     }
 

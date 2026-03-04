@@ -1,27 +1,13 @@
 using System;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Media;
+using GraphicEditor.Common;
 using GraphicEditor.Common.Interfaces;
 
 namespace GraphicEditor.ViewModels;
 
-public abstract class ShapeViewModel : INotifyPropertyChanged, ISceneShape
+public abstract class ShapeViewModel : ObservableBase, ISceneShape
 {
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-
-    protected bool SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)
-    {
-        if (Equals(field, value)) return false;
-        field = value;
-        OnPropertyChanged(name);
-        return true;
-    }
-
     private string _name = "Фигура";
     public string Name
     {
@@ -40,7 +26,7 @@ public abstract class ShapeViewModel : INotifyPropertyChanged, ISceneShape
         }
     }
 
-    private Color _fillColor = Color.FromRgb(100, 149, 237);
+    private Color _fillColor = EditorConstants.DefaultFillColor;
     public Color FillColor
     {
         get => _fillColor;
@@ -88,7 +74,7 @@ public abstract class ShapeViewModel : INotifyPropertyChanged, ISceneShape
         set => SetField(ref _isVisible, value);
     }
 
-    private string _layerName = "Слой 1";
+    private string _layerName = EditorConstants.DefaultLayerName;
     public string LayerName
     {
         get => _layerName;
@@ -101,6 +87,7 @@ public abstract class ShapeViewModel : INotifyPropertyChanged, ISceneShape
 
     public abstract void Move(Point delta);
     public abstract void Scale(double ratio);
+    public abstract void Scale(double ratioX, double ratioY);
     public abstract void Rotate(double angle);
     public abstract void MirrorX();
     public abstract void MirrorY();
