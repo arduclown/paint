@@ -1,13 +1,23 @@
 using System.Collections.ObjectModel;
 using GraphicEditor.Common.Interfaces;
 
-namespace GraphicEditor.ViewModels;
-
-public class ShapeCollectionAdapter(ObservableCollection<ShapeViewModel> inner) : ISceneCollection
+namespace GraphicEditor.ViewModels
 {
-    public void Add(ISceneShape shape) => inner.Add((ShapeViewModel)shape);
-    public void Remove(ISceneShape shape) => inner.Remove((ShapeViewModel)shape);
-    public int IndexOf(ISceneShape shape) => inner.IndexOf((ShapeViewModel)shape);
-    public void Insert(int index, ISceneShape shape) => inner.Insert(index, (ShapeViewModel)shape);
-    public void RemoveAt(int index) => inner.RemoveAt(index);
+    // Адаптер: оборачивает ObservableCollection<ShapeViewModel> как ISceneCollection,
+    // чтобы команды из TeamCore могли работать с коллекцией UI без прямой зависимости на TeamUI.
+    public class ShapeCollectionAdapter : ISceneCollection
+    {
+        private readonly ObservableCollection<ShapeViewModel> _inner;
+
+        public ShapeCollectionAdapter(ObservableCollection<ShapeViewModel> inner)
+        {
+            _inner = inner;
+        }
+
+        public void Add(ISceneShape shape) => _inner.Add((ShapeViewModel)shape);
+        public void Remove(ISceneShape shape) => _inner.Remove((ShapeViewModel)shape);
+        public int IndexOf(ISceneShape shape) => _inner.IndexOf((ShapeViewModel)shape);
+        public void Insert(int index, ISceneShape shape) => _inner.Insert(index, (ShapeViewModel)shape);
+        public void RemoveAt(int index) => _inner.RemoveAt(index);
+    }
 }

@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -16,8 +15,7 @@ namespace GraphicEditor;
 
 public partial class MainWindow : Window
 {
-    private MainWindowViewModel? _viewModel;
-    private MainWindowViewModel VM => _viewModel ?? (DataContext as MainWindowViewModel)!;
+    private MainWindowViewModel VM => (DataContext as MainWindowViewModel)!;
 
     private bool _isDrawing;
     private Point _drawStart;
@@ -25,13 +23,12 @@ public partial class MainWindow : Window
     private bool _isDragging;
     private ShapeViewModel? _dragTarget;
     private Point _dragLastPos;
+    private Point _dragAnchorOffset; // offset from pointer to shape's top-left at drag start
 
     private bool _isResizing;
-    private int _resizeHandleIndex;
-    private Point _resizeCenter;
-    private Point _resizeStartPos;
-    private double _resizeStartDist;
-    private double _resizeLastRatio;
+    private int _resizeHandleIndex = -1;
+    private Point _resizeAnchor;
+    private Rect _resizeStartBounds;
 
     private bool _isRotating;
     private double _rotateStartAngle;
@@ -42,18 +39,9 @@ public partial class MainWindow : Window
     private Ellipse? _rotationHandle;
     private Line? _rotationLine;
 
-    // Drag-and-drop в списке фигур
     private bool _isListDragging;
-    private ShapeViewModel? _listDragShape;
-    private Point _listDragStart;
-
-    // Rubber band выделение
-    private bool _isRubberBand;
-    private Point _rubberBandStart;
-
-    // Перетаскивание группы
-    private bool _isMultiDragging;
-    private Point _multiDragLastPos;
+    private int _listDragFromIndex = -1;
+    private Point _listDragStartPos;
 
     private static readonly (Color color, string name)[] Palette =
     [
@@ -84,15 +72,10 @@ public partial class MainWindow : Window
         BuildColorPalette(StrokeColorPanel, isFill: false);
         DrawGrid(VM.GridStep);
         InitHandles();
-        SyncColorViews();
-    }
 
-    private void SyncColorViews()
-    {
-        if (FillColorView is not null)
-            FillColorView.Color = VM.ActiveFillColor;
-        if (StrokeColorView is not null)
-            StrokeColorView.Color = VM.ActiveStrokeColor;
+        ShapesListBox.PointerPressed  += ShapesList_PointerPressed;
+        ShapesListBox.PointerMoved    += ShapesList_PointerMoved;
+        ShapesListBox.PointerReleased += ShapesList_PointerReleased;
     }
 
     private void BuildColorPalette(WrapPanel panel, bool isFill)
@@ -126,16 +109,9 @@ public partial class MainWindow : Window
             var captured = color;
             btn.Click += (_, _) =>
             {
-                if (isFill)
-                {
-                    VM.ApplyFillColor(captured);
-                    if (FillColorView is not null) FillColorView.Color = captured;
-                }
-                else
-                {
-                    VM.ApplyStrokeColor(captured);
-                    if (StrokeColorView is not null) StrokeColorView.Color = captured;
-                }
+                if (isFill) VM.ApplyFillColor(captured);
+                else VM.ApplyStrokeColor(captured);
+                RebuildRecentColors();
             };
 
             panel.Children.Add(btn);
@@ -166,6 +142,14 @@ public partial class MainWindow : Window
 
     private void InitHandles()
     {
+        StandardCursorType[] handleCursors =
+        [
+            StandardCursorType.TopLeftCorner,
+            StandardCursorType.TopRightCorner,
+            StandardCursorType.BottomRightCorner,
+            StandardCursorType.BottomLeftCorner,
+        ];
+
         for (int i = 0; i < 4; i++)
         {
             var h = new Avalonia.Controls.Shapes.Rectangle
@@ -175,7 +159,7 @@ public partial class MainWindow : Window
                 Stroke = new SolidColorBrush(Color.FromRgb(86, 156, 214)),
                 StrokeThickness = 1.5,
                 IsVisible = false,
-                Cursor = new Cursor(StandardCursorType.SizeAll),
+                Cursor = new Cursor(handleCursors[i]),
             };
             h.PointerPressed += Handle_PointerPressed;
             _handles[i] = h;
@@ -245,15 +229,23 @@ public partial class MainWindow : Window
     {
         if (!e.GetCurrentPoint(DrawingCanvas).Properties.IsLeftButtonPressed) return;
         if (VM.SelectedShape is null) return;
-        if (VM.IsShapeOnLockedLayer(VM.SelectedShape)) return;
 
         _isResizing = true;
-        _resizeHandleIndex = Array.IndexOf(_handles, sender);
+        _resizeHandleIndex = Array.IndexOf(_handles, sender as Avalonia.Controls.Shapes.Rectangle);
+
         var b = VM.SelectedShape.Bounds;
-        _resizeCenter = new Point(b.X + b.Width / 2, b.Y + b.Height / 2);
-        _resizeStartPos = e.GetPosition(DrawingCanvas);
-        _resizeStartDist = Math.Max(1, Dist(_resizeCenter, _resizeStartPos));
-        _resizeLastRatio = 1.0;
+        _resizeStartBounds = b;
+
+        // Anchor = opposite corner (stays fixed during drag)
+        // Handle layout: 0=TL, 1=TR, 2=BR, 3=BL
+        _resizeAnchor = _resizeHandleIndex switch
+        {
+            0 => new Point(b.Right, b.Bottom),
+            1 => new Point(b.Left,  b.Bottom),
+            2 => new Point(b.Left,  b.Top),
+            3 => new Point(b.Right, b.Top),
+            _ => new Point(b.X + b.Width / 2, b.Y + b.Height / 2),
+        };
 
         e.Pointer.Capture(DrawingCanvas);
         e.Handled = true;
@@ -263,7 +255,6 @@ public partial class MainWindow : Window
     {
         if (!e.GetCurrentPoint(DrawingCanvas).Properties.IsLeftButtonPressed) return;
         if (VM.SelectedShape is null) return;
-        if (VM.IsShapeOnLockedLayer(VM.SelectedShape)) return;
 
         _isRotating = true;
         var b = VM.SelectedShape.Bounds;
@@ -281,8 +272,32 @@ public partial class MainWindow : Window
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
-    private static Point ApplyShiftConstraint(ToolType tool, Point start, Point current) =>
-        ShapeRegistry.GetByTool(tool)?.ShiftConstraint?.Invoke(start, current) ?? current;
+    private static Point ApplyShiftConstraint(ToolType tool, Point start, Point current)
+    {
+        double dx = current.X - start.X;
+        double dy = current.Y - start.Y;
+
+        switch (tool)
+        {
+            case ToolType.Rectangle:
+            case ToolType.Triangle:
+            {
+                double size = Math.Max(Math.Abs(dx), Math.Abs(dy));
+                return new Point(start.X + Math.Sign(dx) * size,
+                                 start.Y + Math.Sign(dy) * size);
+            }
+            case ToolType.Line:
+            {
+                double len = Math.Sqrt(dx * dx + dy * dy);
+                double angle = Math.Atan2(dy, dx);
+                double snapped = Math.Round(angle / (Math.PI / 4)) * (Math.PI / 4);
+                return new Point(start.X + len * Math.Cos(snapped),
+                                 start.Y + len * Math.Sin(snapped));
+            }
+            default:
+                return current;
+        }
+    }
 
     private void Canvas_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -292,18 +307,12 @@ public partial class MainWindow : Window
 
         if (VM.CurrentTool == ToolType.Select)
         {
-            // Клик по пустому месту — начинаем rubber band
-            _isRubberBand = true;
-            _rubberBandStart = pos;
-            RubberBand.IsVisible = false;
-            VM.ClearSelection();
-            OnSelectionChanged();
-            e.Pointer.Capture(DrawingCanvas);
+            VM.SelectedShape = null;
             return;
         }
 
         if (VM.ActiveLayer?.IsLocked == true) return;
-        if (VM.SnapEnabled) pos = VM.SnapToGrid(pos);
+        if (VM.SnapEnabled) pos = SnapToGrid(pos);
 
         _isDrawing = true;
         _drawStart = pos;
@@ -317,119 +326,116 @@ public partial class MainWindow : Window
         var pos = e.GetPosition(DrawingCanvas);
         VM.StatusMouse = $"X: {(int)pos.X}, Y: {(int)pos.Y}";
 
-        if (_isRubberBand)
-            HandleRubberBandMove(pos);
-        else if (_isMultiDragging)
-            HandleMultiDragMove(pos);
-        else if (_isDrawing)
-            HandleDrawingMove(pos, e.KeyModifiers);
+        if (_isDrawing)
+        {
+            if (VM.SnapEnabled) pos = SnapToGrid(pos);
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                pos = ApplyShiftConstraint(VM.CurrentTool, _drawStart, pos);
+            UpdatePreview(pos);
+        }
         else if (_isRotating && VM.SelectedShape is not null)
-            HandleRotatingMove(pos, e.KeyModifiers);
+        {
+            var b = VM.SelectedShape.Bounds;
+            var center = new Point(b.X + b.Width / 2, b.Y + b.Height / 2);
+            double currentAngle = Math.Atan2(pos.Y - center.Y, pos.X - center.X) * 180.0 / Math.PI;
+            double delta = currentAngle - _rotateStartAngle;
+
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                delta = Math.Round(delta / 15.0) * 15.0;
+
+            if (Math.Abs(delta) > 0.1)
+            {
+                VM.SelectedShape.Rotate(delta);
+                _rotateStartAngle = currentAngle;
+            }
+        }
         else if (_isResizing && VM.SelectedShape is not null)
-            HandleResizingMove(pos, e.KeyModifiers);
+        {
+            var shape = VM.SelectedShape;
+            var b = shape.Bounds;
+            if (b.Width < 1 || b.Height < 1) return;
+
+            double newWidth  = Math.Max(5, Math.Abs(pos.X - _resizeAnchor.X));
+            double newHeight = Math.Max(5, Math.Abs(pos.Y - _resizeAnchor.Y));
+
+            double scaleX = newWidth  / b.Width;
+            double scaleY = newHeight / b.Height;
+
+            // Shift → uniform scale (proportional), larger axis wins
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            {
+                double uniform = Math.Max(scaleX, scaleY);
+                scaleX = uniform;
+                scaleY = uniform;
+                newWidth  = b.Width  * uniform;
+                newHeight = b.Height * uniform;
+            }
+
+            if (scaleX < 0.01 || scaleX > 50 || scaleY < 0.01 || scaleY > 50) return;
+
+            shape.ScaleXY(scaleX, scaleY);
+
+            // After ScaleXY the shape scales around its bounds center.
+            // Move the shape so the anchor corner stays fixed.
+            double cx = b.X + b.Width  / 2;
+            double cy = b.Y + b.Height / 2;
+
+            // Where the anchor corner ends up after ScaleXY (before the move):
+            // 0=TL dragged → anchor BR = (cx + W/2*sx, cy + H/2*sy)
+            // 1=TR dragged → anchor BL = (cx - W/2*sx, cy + H/2*sy)
+            // 2=BR dragged → anchor TL = (cx - W/2*sx, cy - H/2*sy)
+            // 3=BL dragged → anchor TR = (cx + W/2*sx, cy - H/2*sy)
+            Point anchorAfter = _resizeHandleIndex switch
+            {
+                0 => new Point(cx + b.Width / 2 * scaleX, cy + b.Height / 2 * scaleY),
+                1 => new Point(cx - b.Width / 2 * scaleX, cy + b.Height / 2 * scaleY),
+                2 => new Point(cx - b.Width / 2 * scaleX, cy - b.Height / 2 * scaleY),
+                3 => new Point(cx + b.Width / 2 * scaleX, cy - b.Height / 2 * scaleY),
+                _ => new Point(cx, cy),
+            };
+
+            shape.Move(new Point(_resizeAnchor.X - anchorAfter.X,
+                                 _resizeAnchor.Y - anchorAfter.Y));
+        }
         else if (_isDragging && _dragTarget is not null)
-            HandleSingleDragMove(pos);
-    }
-
-    private void HandleRubberBandMove(Point pos)
-    {
-        double x = Math.Min(_rubberBandStart.X, pos.X);
-        double y = Math.Min(_rubberBandStart.Y, pos.Y);
-        double w = Math.Abs(pos.X - _rubberBandStart.X);
-        double h = Math.Abs(pos.Y - _rubberBandStart.Y);
-        Canvas.SetLeft(RubberBand, x);
-        Canvas.SetTop(RubberBand, y);
-        RubberBand.Width = w;
-        RubberBand.Height = h;
-        RubberBand.IsVisible = w > 3 || h > 3;
-    }
-
-    private void HandleMultiDragMove(Point pos)
-    {
-        var delta = new Point(pos.X - _multiDragLastPos.X, pos.Y - _multiDragLastPos.Y);
-        VM.MoveSelected(delta);
-        _multiDragLastPos = pos;
-    }
-
-    private void HandleDrawingMove(Point pos, KeyModifiers modifiers)
-    {
-        if (VM.SnapEnabled) pos = VM.SnapToGrid(pos);
-        if (modifiers.HasFlag(KeyModifiers.Shift))
-            pos = ApplyShiftConstraint(VM.CurrentTool, _drawStart, pos);
-        UpdatePreview(pos);
-    }
-
-    private void HandleRotatingMove(Point pos, KeyModifiers modifiers)
-    {
-        var b = VM.SelectedShape!.Bounds;
-        var center = new Point(b.X + b.Width / 2, b.Y + b.Height / 2);
-        double currentAngle = Math.Atan2(pos.Y - center.Y, pos.X - center.X) * 180.0 / Math.PI;
-        double delta = currentAngle - _rotateStartAngle;
-
-        if (modifiers.HasFlag(KeyModifiers.Shift))
-            delta = Math.Round(delta / 15.0) * 15.0;
-
-        if (Math.Abs(delta) > 0.1)
         {
-            VM.SelectedShape!.Rotate(delta);
-            _rotateStartAngle = currentAngle;
+            if (VM.SnapEnabled)
+            {
+                // Snap the shape's top-left corner to the grid
+                var targetTL = SnapToGrid(new Point(pos.X - _dragAnchorOffset.X,
+                                                    pos.Y - _dragAnchorOffset.Y));
+                var b = _dragTarget.Bounds;
+                var delta = new Point(targetTL.X - b.X, targetTL.Y - b.Y);
+                if (delta.X != 0 || delta.Y != 0)
+                    _dragTarget.Move(delta);
+            }
+            else
+            {
+                var delta = new Point(pos.X - _dragLastPos.X, pos.Y - _dragLastPos.Y);
+                _dragTarget.Move(delta);
+                _dragLastPos = pos;
+            }
         }
-    }
-
-    private void HandleResizingMove(Point pos, KeyModifiers modifiers)
-    {
-        double dx0 = Math.Abs(_resizeStartPos.X - _resizeCenter.X);
-        double dy0 = Math.Abs(_resizeStartPos.Y - _resizeCenter.Y);
-        double dxN = Math.Abs(pos.X - _resizeCenter.X);
-        double dyN = Math.Abs(pos.Y - _resizeCenter.Y);
-
-        if (dx0 < 5) dx0 = 5;
-        if (dy0 < 5) dy0 = 5;
-
-        double ratioX = dxN / dx0;
-        double ratioY = dyN / dy0;
-
-        if (ratioX < 0.05 || ratioX > 20) ratioX = 1.0;
-        if (ratioY < 0.05 || ratioY > 20) ratioY = 1.0;
-
-        double incX = ratioX / _resizeLastRatio;
-        double incY = ratioY / _resizeLastRatio;
-
-        if (modifiers.HasFlag(KeyModifiers.Shift))
-        {
-            double uniform = Math.Max(incX, incY);
-            incX = incY = uniform;
-        }
-
-        if (Math.Abs(incX - 1.0) > 0.001 || Math.Abs(incY - 1.0) > 0.001)
-        {
-            VM.SelectedShape!.Scale(incX, incY);
-            _resizeLastRatio = ratioX;
-        }
-    }
-
-    private void HandleSingleDragMove(Point pos)
-    {
-        var delta = new Point(pos.X - _dragLastPos.X, pos.Y - _dragLastPos.Y);
-        _dragTarget!.Move(delta);
-        _dragLastPos = pos;
     }
 
     private void Canvas_PointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         var pos = e.GetPosition(DrawingCanvas);
 
-        if (_isRubberBand)
-            HandleRubberBandRelease(pos, e);
-
-        if (_isMultiDragging)
-        {
-            _isMultiDragging = false;
-            e.Pointer.Capture(null);
-        }
-
         if (_isDrawing)
-            HandleDrawingRelease(pos, e);
+        {
+            _isDrawing = false;
+            PreviewPath.IsVisible = false;
+            e.Pointer.Capture(null);
+
+            if (VM.SnapEnabled) pos = SnapToGrid(pos);
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                pos = ApplyShiftConstraint(VM.CurrentTool, _drawStart, pos);
+
+            var shape = VM.CreateShape(VM.CurrentTool, _drawStart, pos);
+            VM.AddShape(shape);
+            VM.SelectedShape = shape;
+        }
 
         if (_isResizing)
         {
@@ -451,38 +457,124 @@ public partial class MainWindow : Window
         }
     }
 
-    private void HandleRubberBandRelease(Point pos, PointerReleasedEventArgs e)
+    // ─── Drag-and-drop порядка фигур в левой панели ──────────────────────────
+
+    private void ShapesList_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        _isRubberBand = false;
-        RubberBand.IsVisible = false;
-        e.Pointer.Capture(null);
+        if (!e.GetCurrentPoint(ShapesListBox).Properties.IsLeftButtonPressed) return;
+        var pos = e.GetPosition(ShapesListBox);
+        if (!IsPointerOnDragHandle(pos)) return;
 
-        double x = Math.Min(_rubberBandStart.X, pos.X);
-        double y = Math.Min(_rubberBandStart.Y, pos.Y);
-        double w = Math.Abs(pos.X - _rubberBandStart.X);
-        double h = Math.Abs(pos.Y - _rubberBandStart.Y);
+        var idx = GetListItemIndexAtPoint(pos);
+        if (idx < 0) return;
 
-        if (w > 3 || h > 3)
+        // Выделяем фигуру вручную и перехватываем событие, чтобы ListBox
+        // не переключал выделение сам по себе при начале перетаскивания
+        VM.SelectedShape = VM.Shapes[idx];
+
+        _listDragFromIndex = idx;
+        _listDragStartPos  = pos;
+        _isListDragging    = true;
+
+        ShapesListBox.Cursor = new Cursor(StandardCursorType.SizeNorthSouth);
+        e.Pointer.Capture(ShapesListBox);
+        e.Handled = true;
+    }
+
+    private void ShapesList_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_isListDragging || _listDragFromIndex < 0) return;
+
+        var pos = e.GetPosition(ShapesListBox);
+        var overIndex = GetListItemIndexAtPoint(pos);
+        UpdateDragIndicator(overIndex);
+    }
+
+    private void ShapesList_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        DragDropCanvas.IsVisible = false;
+        DragDropCanvas.Children.Clear();
+        ShapesListBox.Cursor = null;
+
+        if (!_isListDragging || _listDragFromIndex < 0)
         {
-            VM.SelectShapesInRect(new Rect(x, y, w, h));
-            OnSelectionChanged();
+            _listDragFromIndex = -1;
+            _isListDragging    = false;
+            return;
         }
-    }
 
-    private void HandleDrawingRelease(Point pos, PointerReleasedEventArgs e)
-    {
-        _isDrawing = false;
-        PreviewPath.IsVisible = false;
+        var toIndex = GetListItemIndexAtPoint(e.GetPosition(ShapesListBox));
+        if (toIndex >= 0 && toIndex != _listDragFromIndex)
+            VM.MoveShapeOrder(_listDragFromIndex, toIndex);
+
+        _listDragFromIndex = -1;
+        _isListDragging    = false;
         e.Pointer.Capture(null);
-
-        if (VM.SnapEnabled) pos = VM.SnapToGrid(pos);
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
-            pos = ApplyShiftConstraint(VM.CurrentTool, _drawStart, pos);
-
-        var shape = VM.CreateShape(VM.CurrentTool, _drawStart, pos);
-        VM.AddShape(shape);
-        VM.SelectedShape = shape;
     }
+
+    /// Проверяет, что клик пришёл с элемента-ручки (Tag == "draghandle")
+    private bool IsPointerOnDragHandle(Point posInListBox)
+    {
+        var hit = ShapesListBox.InputHitTest(posInListBox) as Visual;
+        while (hit is not null)
+        {
+            if (hit is Control ctrl && ctrl.Tag is "draghandle")
+                return true;
+            if (hit is ListBoxItem)
+                break;
+            hit = hit.GetVisualParent();
+        }
+        return false;
+    }
+
+    private int GetListItemIndexAtPoint(Point posInListBox)
+    {
+        for (int i = 0; i < VM.Shapes.Count; i++)
+        {
+            if (ShapesListBox.ContainerFromIndex(i) is not Visual container) continue;
+            var transform = container.TransformToVisual(ShapesListBox);
+            if (transform is null) continue;
+            var top    = transform.Value.Transform(new Point(0, 0)).Y;
+            var bottom = top + container.Bounds.Height;
+            if (posInListBox.Y >= top && posInListBox.Y < bottom)
+                return i;
+        }
+        return -1;
+    }
+
+    private void UpdateDragIndicator(int overIndex)
+    {
+        DragDropCanvas.Children.Clear();
+        if (overIndex < 0)
+        {
+            DragDropCanvas.IsVisible = false;
+            return;
+        }
+
+        if (ShapesListBox.ContainerFromIndex(overIndex) is not Visual container)
+        {
+            DragDropCanvas.IsVisible = false;
+            return;
+        }
+
+        var transform = container.TransformToVisual(DragDropCanvas);
+        if (transform is null) return;
+
+        var top    = transform.Value.Transform(new Point(0, 0)).Y;
+        double lineY = overIndex > _listDragFromIndex ? top + container.Bounds.Height : top;
+
+        DragDropCanvas.Children.Add(new Avalonia.Controls.Shapes.Line
+        {
+            StartPoint       = new Point(4, lineY),
+            EndPoint         = new Point(DragDropCanvas.Bounds.Width - 4, lineY),
+            Stroke           = new SolidColorBrush(Color.FromRgb(86, 156, 214)),
+            StrokeThickness  = 2,
+            IsHitTestVisible = false,
+        });
+        DragDropCanvas.IsVisible = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     private void Shape_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -491,43 +583,38 @@ public partial class MainWindow : Window
         if (sender is Avalonia.Controls.Shapes.Path path
             && path.DataContext is ShapeViewModel vm)
         {
-            VM.CurrentTool = ToolType.Select;
-
+            // Ctrl+клик — выбрать вторую фигуру для булевой операции
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
-                VM.ToggleSelection(vm);
-                OnSelectionChanged();
+                VM.SecondSelectedShape = vm != VM.SelectedShape ? vm : null;
+                e.Handled = true;
+                return;
             }
-            else if (VM.SelectedShapes.Contains(vm) && VM.SelectedShapes.Count > 1)
-            {
-                // Клик по уже выделенной при мульти-выделении — начинаем перетаскивание группы
-                if (!VM.IsShapeOnLockedLayer(vm))
-                {
-                    _isMultiDragging = true;
-                    _multiDragLastPos = e.GetPosition(DrawingCanvas);
-                    e.Pointer.Capture(DrawingCanvas);
-                }
-            }
-            else
-            {
-                VM.SelectedShape = vm;
-                OnSelectionChanged();
 
-                if (!VM.IsShapeOnLockedLayer(vm))
-                {
-                    _isDragging = true;
-                    _dragTarget = vm;
-                    _dragLastPos = e.GetPosition(DrawingCanvas);
-                    e.Pointer.Capture(DrawingCanvas);
-                }
-            }
+            // Обычный клик — выделить и начать перетаскивание
+            VM.SelectedShape = vm;
+            VM.CurrentTool = ToolType.Select;
+
+            _isDragging = true;
+            _dragTarget = vm;
+            _dragLastPos = e.GetPosition(DrawingCanvas);
+            var bounds = vm.Bounds;
+            _dragAnchorOffset = new Point(_dragLastPos.X - bounds.X, _dragLastPos.Y - bounds.Y);
+            e.Pointer.Capture(DrawingCanvas);
             e.Handled = true;
         }
     }
 
     private void UpdatePreview(Point current)
     {
-        var pathData = ShapeRegistry.GetByTool(VM.CurrentTool)?.BuildPreview?.Invoke(_drawStart, current);
+        string? pathData = VM.CurrentTool switch
+        {
+            ToolType.Circle    => BuildCirclePreview(_drawStart, current),
+            ToolType.Rectangle => BuildRectPreview(_drawStart, current),
+            ToolType.Triangle  => BuildTrianglePreview(_drawStart, current),
+            ToolType.Line      => BuildLinePreview(_drawStart, current),
+            _                  => null,
+        };
 
         if (pathData is not null)
         {
@@ -535,6 +622,43 @@ public partial class MainWindow : Window
             catch { PreviewPath.Data = null; }
         }
     }
+
+    private Point SnapToGrid(Point p)
+    {
+        double step = VM.GridStep;
+        return new Point(
+            Math.Round(p.X / step, MidpointRounding.AwayFromZero) * step,
+            Math.Round(p.Y / step, MidpointRounding.AwayFromZero) * step);
+    }
+
+    private static string BuildCirclePreview(Point center, Point edge)
+    {
+        double dx = edge.X - center.X;
+        double dy = edge.Y - center.Y;
+        double r = Math.Max(3, Math.Sqrt(dx * dx + dy * dy));
+        return FormattableString.Invariant(
+            $"M {center.X - r:F2},{center.Y:F2} A {r:F2},{r:F2},0,1,0,{center.X + r:F2},{center.Y:F2} A {r:F2},{r:F2},0,1,0,{center.X - r:F2},{center.Y:F2} Z");
+    }
+
+    private static string BuildRectPreview(Point p1, Point p2)
+    {
+        double x1 = Math.Min(p1.X, p2.X), y1 = Math.Min(p1.Y, p2.Y);
+        double x2 = Math.Max(p1.X, p2.X), y2 = Math.Max(p1.Y, p2.Y);
+        return FormattableString.Invariant(
+            $"M {x1:F2},{y1:F2} H {x2:F2} V {y2:F2} H {x1:F2} Z");
+    }
+
+    private static string BuildTrianglePreview(Point p1, Point p2)
+    {
+        double x1 = Math.Min(p1.X, p2.X), x2 = Math.Max(p1.X, p2.X);
+        double y1 = Math.Min(p1.Y, p2.Y), y2 = Math.Max(p1.Y, p2.Y);
+        double cx = (x1 + x2) / 2.0;
+        return FormattableString.Invariant(
+            $"M {cx:F2},{y1:F2} L {x1:F2},{y2:F2} L {x2:F2},{y2:F2} Z");
+    }
+
+    private static string BuildLinePreview(Point p1, Point p2) =>
+        FormattableString.Invariant($"M {p1.X:F2},{p1.Y:F2} L {p2.X:F2},{p2.Y:F2}");
 
     private void ShapeNameBox_TextChanged(object? sender, TextChangedEventArgs e)
     {
@@ -554,75 +678,28 @@ public partial class MainWindow : Window
         }
     }
 
-    private void FillColorView_ColorChanged(object? sender, Avalonia.Controls.ColorChangedEventArgs e)
+    private void RebuildRecentColors()
     {
-        VM.ApplyFillColor(e.NewColor);
-    }
-
-    private void StrokeColorView_ColorChanged(object? sender, Avalonia.Controls.ColorChangedEventArgs e)
-    {
-        VM.ApplyStrokeColor(e.NewColor);
-    }
-
-    // Drag-and-drop в списке фигур
-    private void DragHandle_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (sender is TextBlock tb && tb.DataContext is ShapeViewModel shape)
+        RecentColorsPanel.Children.Clear();
+        foreach (var color in VM.RecentColors)
         {
-            _listDragShape = shape;
-            _listDragStart = e.GetPosition(this);
-            _isListDragging = false;
-            e.Handled = true;
-        }
-    }
-
-    private void DragHandle_PointerMoved(object? sender, PointerEventArgs e)
-    {
-        if (_listDragShape is null) return;
-        var pos = e.GetPosition(this);
-        var delta = pos - _listDragStart;
-
-        if (!_isListDragging && (Math.Abs(delta.X) > 5 || Math.Abs(delta.Y) > 5))
-            _isListDragging = true;
-
-        if (!_isListDragging) return;
-
-        // Определяем целевой индекс
-        var listBox = this.FindControl<ListBox>("ShapesList")
-            ?? this.GetVisualDescendants().OfType<ListBox>().FirstOrDefault(lb => lb.ItemsSource == VM.Shapes);
-        if (listBox is null) return;
-
-        int fromIdx = VM.Shapes.IndexOf(_listDragShape);
-        int targetIdx = fromIdx;
-
-        // Ищем элемент под курсором
-        foreach (var item in listBox.GetVisualDescendants().OfType<ListBoxItem>())
-        {
-            var itemBounds = item.Bounds;
-            var itemPos = item.TranslatePoint(new Point(0, 0), this);
-            if (itemPos is null) continue;
-            double midY = itemPos.Value.Y + itemBounds.Height / 2;
-            if (pos.Y < midY && item.DataContext is ShapeViewModel sv)
+            var btn = new Button
             {
-                targetIdx = VM.Shapes.IndexOf(sv);
-                break;
-            }
-            if (item.DataContext is ShapeViewModel sv2)
-                targetIdx = VM.Shapes.IndexOf(sv2) + 1;
+                Width = 20, Height = 20,
+                Margin = new Thickness(1),
+                Padding = new Thickness(0),
+                Background = new SolidColorBrush(color),
+                BorderBrush = new SolidColorBrush(Colors.Gray),
+                BorderThickness = new Thickness(1),
+            };
+            var c = color;
+            btn.Click += (_, _) =>
+            {
+                VM.ApplyFillColor(c);
+                RebuildRecentColors();
+            };
+            RecentColorsPanel.Children.Add(btn);
         }
-
-        if (targetIdx != fromIdx && targetIdx >= 0 && targetIdx <= VM.Shapes.Count)
-        {
-            if (targetIdx > fromIdx) targetIdx--;
-            if (targetIdx != fromIdx)
-                VM.Shapes.Move(fromIdx, targetIdx);
-        }
-    }
-
-    private void DragHandle_PointerReleased(object? sender, PointerReleasedEventArgs e)
-    {
-        _listDragShape = null;
-        _isListDragging = false;
     }
 
     private void GridStepCombo_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -639,14 +716,8 @@ public partial class MainWindow : Window
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (e is not null && DataContext is MainWindowViewModel newVm)
-        {
-            // Unsubscribe old if any
-            if (_viewModel is not null)
-                _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
-            _viewModel = newVm;
-            newVm.PropertyChanged += ViewModel_PropertyChanged;
-        }
+        if (DataContext is MainWindowViewModel vm)
+            vm.PropertyChanged += ViewModel_PropertyChanged;
     }
 
     private async void ImportButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -670,7 +741,20 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            await ShowErrorDialog("Ошибка импорта", ex.Message);
+            var dlg = new Window
+            {
+                Title = "Ошибка импорта",
+                Width = 420, Height = 130,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Content = new TextBlock
+                {
+                    Text = ex.Message,
+                    Margin = new Thickness(16),
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = Brushes.OrangeRed,
+                }
+            };
+            await dlg.ShowDialog(this);
         }
     }
 
@@ -703,26 +787,21 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            await ShowErrorDialog("Ошибка экспорта", ex.Message);
-        }
-    }
-
-    private async Task ShowErrorDialog(string title, string message)
-    {
-        var dlg = new Window
-        {
-            Title = title,
-            Width = 420, Height = 130,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = new TextBlock
+            var dlg = new Window
             {
-                Text = message,
-                Margin = new Thickness(16),
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = Brushes.OrangeRed,
-            }
-        };
-        await dlg.ShowDialog(this);
+                Title = "Ошибка экспорта",
+                Width = 420, Height = 130,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Content = new TextBlock
+                {
+                    Text = ex.Message,
+                    Margin = new Thickness(16),
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = Brushes.OrangeRed,
+                }
+            };
+            await dlg.ShowDialog(this);
+        }
     }
 
     private void LayerShape_PointerPressed(object? sender, PointerPressedEventArgs e)
@@ -755,7 +834,22 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainWindowViewModel.SelectedShape))
         {
-            OnSelectionChanged();
+            var shape = VM.SelectedShape;
+            ShapeNameBox.Text = shape?.Name ?? "";
+
+            _suppressLayerComboChange = true;
+            LayerComboBox.SelectedItem = shape is not null
+                ? VM.Layers.FirstOrDefault(l => l.Name == shape.LayerName)
+                : null;
+            _suppressLayerComboChange = false;
+
+            if (_handleShape is not null)
+                _handleShape.PropertyChanged -= OnHandleShapeChanged;
+            _handleShape = shape;
+            if (_handleShape is not null)
+                _handleShape.PropertyChanged += OnHandleShapeChanged;
+            UpdateHandles(shape);
+            UpdateSelectionRect(shape);
         }
     }
 
@@ -763,7 +857,10 @@ public partial class MainWindow : Window
         System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ShapeViewModel.Bounds))
-            UpdateSelectionVisuals();
+        {
+            UpdateHandles(VM.SelectedShape);
+            UpdateSelectionRect(VM.SelectedShape);
+        }
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -803,19 +900,13 @@ public partial class MainWindow : Window
 
         if (e.KeyModifiers != KeyModifiers.None) return;
 
-        if (e.Key == Key.S)
+        switch (e.Key)
         {
-            VM.CurrentTool = ToolType.Select;
-            e.Handled = true;
-        }
-        else
-        {
-            var tool = ShapeRegistry.GetByHotkey(e.Key);
-            if (tool.HasValue)
-            {
-                VM.CurrentTool = tool.Value;
-                e.Handled = true;
-            }
+            case Key.S: VM.CurrentTool = ToolType.Select;    e.Handled = true; break;
+            case Key.C: VM.CurrentTool = ToolType.Circle;    e.Handled = true; break;
+            case Key.R: VM.CurrentTool = ToolType.Rectangle; e.Handled = true; break;
+            case Key.T: VM.CurrentTool = ToolType.Triangle;  e.Handled = true; break;
+            case Key.L: VM.CurrentTool = ToolType.Line;      e.Handled = true; break;
         }
     }
 
@@ -826,48 +917,20 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void UpdateSelectionVisuals()
+    private void UpdateSelectionRect(ShapeViewModel? shape)
     {
-        var bounds = VM.GetSelectionBounds();
-        if (bounds is null)
+        if (shape is null)
         {
             SelectionRect.IsVisible = false;
-            UpdateHandles(null);
             return;
         }
 
-        var b = bounds.Value;
+        var b = shape.Bounds;
         const double pad = 4;
         Canvas.SetLeft(SelectionRect, b.Left - pad);
         Canvas.SetTop(SelectionRect, b.Top - pad);
         SelectionRect.Width = b.Width + pad * 2;
         SelectionRect.Height = b.Height + pad * 2;
         SelectionRect.IsVisible = true;
-
-        // Показываем хэндлы только для одиночного выделения
-        if (VM.SelectedShapes.Count == 1)
-            UpdateHandles(VM.SelectedShapes[0]);
-        else
-            UpdateHandles(null);
-    }
-
-    private void OnSelectionChanged()
-    {
-        var shape = VM.SelectedShape;
-        ShapeNameBox.Text = shape?.Name ?? "";
-
-        _suppressLayerComboChange = true;
-        LayerComboBox.SelectedItem = shape is not null
-            ? VM.Layers.FirstOrDefault(l => l.Name == shape.LayerName)
-            : null;
-        _suppressLayerComboChange = false;
-
-        if (_handleShape is not null)
-            _handleShape.PropertyChanged -= OnHandleShapeChanged;
-        _handleShape = shape;
-        if (_handleShape is not null)
-            _handleShape.PropertyChanged += OnHandleShapeChanged;
-
-        UpdateSelectionVisuals();
     }
 }

@@ -4,24 +4,32 @@ using GraphicEditor.Common.Interfaces;
 
 namespace GraphicEditor.TeamTools.Shapes;
 
-public class Circle(Point center, double radius) : IShape
+public class Circle : IShape
 {
-    private Point _center = radius > 0
-        ? center
-        : throw new ArgumentOutOfRangeException(nameof(radius));
+    private Point _center;
+    private double _radiusX;
+    private double _radiusY;
 
-    private double _radiusX = radius;
-    private double _radiusY = radius;
+    public Circle(Point center, double radius)
+    {
+        if (radius <= 0) throw new ArgumentOutOfRangeException(nameof(radius));
+        _center = center;
+        _radiusX = radius;
+        _radiusY = radius;
+    }
+
+    public Circle(Point center, double radiusX, double radiusY)
+    {
+        if (radiusX <= 0) throw new ArgumentOutOfRangeException(nameof(radiusX));
+        if (radiusY <= 0) throw new ArgumentOutOfRangeException(nameof(radiusY));
+        _center = center;
+        _radiusX = radiusX;
+        _radiusY = radiusY;
+    }
 
     public Point Center => _center;
-    public double Radius => _radiusX;
     public double RadiusX => _radiusX;
     public double RadiusY => _radiusY;
-
-    public Circle(Point center, double radiusX, double radiusY) : this(center, radiusX)
-    {
-        _radiusY = radiusY > 0 ? radiusY : throw new ArgumentOutOfRangeException(nameof(radiusY));
-    }
 
     public void Move(Point offset) =>
         _center = new Point(_center.X + offset.X, _center.Y + offset.Y);
@@ -33,12 +41,12 @@ public class Circle(Point center, double radius) : IShape
         _radiusY *= ratio;
     }
 
-    public void Scale(double ratioX, double ratioY)
+    public void ScaleXY(double sx, double sy)
     {
-        if (ratioX == 0) throw new ArgumentOutOfRangeException(nameof(ratioX));
-        if (ratioY == 0) throw new ArgumentOutOfRangeException(nameof(ratioY));
-        _radiusX *= ratioX;
-        _radiusY *= ratioY;
+        if (sx <= 0) throw new ArgumentOutOfRangeException(nameof(sx));
+        if (sy <= 0) throw new ArgumentOutOfRangeException(nameof(sy));
+        _radiusX *= sx;
+        _radiusY *= sy;
     }
 
     public void Rotate(double angle) { }

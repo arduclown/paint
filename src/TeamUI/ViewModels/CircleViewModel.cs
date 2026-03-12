@@ -28,9 +28,9 @@ public class CircleViewModel(Circle circle) : ShapeViewModel
         NotifyGeometryChanged();
     }
 
-    public override void Scale(double ratioX, double ratioY)
+    public override void ScaleXY(double sx, double sy)
     {
-        circle.Scale(ratioX, ratioY);
+        circle.ScaleXY(sx, sy);
         NotifyGeometryChanged();
     }
 

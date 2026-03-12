@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Media;
-using GraphicEditor.Common;
 using GraphicEditor.TeamTools.Shapes;
 using GraphicEditor.ViewModels;
 
@@ -13,15 +12,16 @@ public record ShapeDto
     public string FillColor { get; init; } = "#FF6495ED";
     public string StrokeColor { get; init; } = "#FF000000";
     public double Opacity { get; init; } = 1.0;
-    public string LayerName { get; init; } = EditorConstants.DefaultLayerName;
+    public string LayerName { get; init; } = "Слой 1";
     public bool IsVisible { get; init; } = true;
     public double StrokeWidth { get; init; } = 1.5;
     public double RotationAngle { get; init; }
 
     public double CenterX { get; init; }
     public double CenterY { get; init; }
-    public double Radius { get; init; }
-    public double? RadiusY { get; init; }
+    public double Radius { get; init; }   // kept for backward compat with old JSON
+    public double RadiusX { get; init; }
+    public double RadiusY { get; init; }
 
     public double[]? PointsX { get; init; }
     public double[]? PointsY { get; init; }
@@ -49,8 +49,9 @@ public record ShapeDto
             {
                 CenterX = cv.Model.Center.X,
                 CenterY = cv.Model.Center.Y,
-                Radius = cv.Model.RadiusX,
+                RadiusX = cv.Model.RadiusX,
                 RadiusY = cv.Model.RadiusY,
+                Radius  = cv.Model.RadiusX,  // backward compat
             };
         }
         else if (vm is PolygonViewModel pv)
@@ -89,9 +90,9 @@ public record ShapeDto
         ShapeViewModel? vm = Type switch
         {
             "Circle" => new CircleViewModel(
-                new Circle(new Point(CenterX, CenterY),
-                    Radius > 0 ? Radius : 10,
-                    RadiusY.HasValue && RadiusY.Value > 0 ? RadiusY.Value : (Radius > 0 ? Radius : 10))),
+                RadiusX > 0 && RadiusY > 0
+                    ? new Circle(new Point(CenterX, CenterY), RadiusX, RadiusY)
+                    : new Circle(new Point(CenterX, CenterY), Radius > 0 ? Radius : 10)),
 
             "Rectangle" when PointsX?.Length >= 4 && PointsY?.Length >= 4 =>
                 CreatePolygonVm(

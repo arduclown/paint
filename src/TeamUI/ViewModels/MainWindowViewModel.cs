@@ -4,21 +4,34 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Media;
-using GraphicEditor.Common;
 using GraphicEditor.Common.Interfaces;
 using GraphicEditor.Common.Models;
 using GraphicEditor.TeamCore;
 using GraphicEditor.TeamImport;
+using AvaloniaCombineMode = Avalonia.Media.GeometryCombineMode;
 
 namespace GraphicEditor.ViewModels;
 
-public class MainWindowViewModel : ObservableBase
+public class MainWindowViewModel : INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    private bool SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    {
+        if (Equals(field, value)) return false;
+        field = value;
+        OnPropertyChanged(name);
+        return true;
+    }
+
     public ObservableCollection<ShapeViewModel> Shapes { get; } = [];
-    public ObservableCollection<ShapeViewModel> SelectedShapes { get; } = [];
     public ObservableCollection<LayerViewModel> Layers { get; } = [];
     public ObservableCollection<Color> RecentColors { get; } = [];
 
@@ -35,11 +48,6 @@ public class MainWindowViewModel : ObservableBase
 
     public LayerViewModel? ActiveLayer => (LayerViewModel?)_layerManager.ActiveLayer;
 
-    public bool IsActiveLayerLocked => ActiveLayer?.IsLocked == true;
-
-    public bool IsShapeOnLockedLayer(ShapeViewModel? shape) =>
-        shape is not null && Layers.FirstOrDefault(l => l.Name == shape.LayerName)?.IsLocked == true;
-
     public void SetActiveLayer(LayerViewModel layer)
     {
         _layerManager.SetActive(layer);
@@ -53,113 +61,56 @@ public class MainWindowViewModel : ObservableBase
         get => _selectedShape;
         set
         {
-            // Очищаем мульти-выделение
-            ClearSelection();
+            if (_selectedShape is not null) _selectedShape.IsSelected = false;
             SetField(ref _selectedShape, value);
-            if (_selectedShape is not null)
-            {
-                _selectedShape.IsSelected = true;
-                SelectedShapes.Add(_selectedShape);
-            }
-            NotifySelectionChanged();
+            if (_selectedShape is not null) _selectedShape.IsSelected = true;
+            OnPropertyChanged(nameof(HasSelection));
+            OnPropertyChanged(nameof(HasBothSelected));
+            OnPropertyChanged(nameof(SelectedOpacity));
+            OnPropertyChanged(nameof(SelectedStrokeWidth));
+            RaiseAllCommands();
         }
     }
 
-    public bool HasSelection => SelectedShapes.Count > 0;
+    public bool HasSelection => _selectedShape is not null;
 
-    public void ClearSelection()
+    private ShapeViewModel? _secondSelectedShape;
+    public ShapeViewModel? SecondSelectedShape
     {
-        foreach (var s in SelectedShapes)
-            s.IsSelected = false;
-        SelectedShapes.Clear();
-        _selectedShape = null;
-    }
-
-    public void AddToSelection(ShapeViewModel shape)
-    {
-        if (SelectedShapes.Contains(shape)) return;
-        shape.IsSelected = true;
-        SelectedShapes.Add(shape);
-        _selectedShape = SelectedShapes.Count == 1 ? SelectedShapes[0] : null;
-        NotifySelectionChanged();
-    }
-
-    public void ToggleSelection(ShapeViewModel shape)
-    {
-        if (SelectedShapes.Contains(shape))
+        get => _secondSelectedShape;
+        set
         {
-            shape.IsSelected = false;
-            SelectedShapes.Remove(shape);
+            // снимаем подсветку, только если это не основная выбранная фигура
+            if (_secondSelectedShape is not null && _secondSelectedShape != _selectedShape)
+                _secondSelectedShape.IsSelected = false;
+            SetField(ref _secondSelectedShape, value);
+            if (_secondSelectedShape is not null)
+                _secondSelectedShape.IsSelected = true;
+            OnPropertyChanged(nameof(HasBothSelected));
+            RaiseAllCommands();
         }
-        else
-        {
-            shape.IsSelected = true;
-            SelectedShapes.Add(shape);
-        }
-        _selectedShape = SelectedShapes.Count == 1 ? SelectedShapes[0] : null;
-        NotifySelectionChanged();
     }
 
-    public void SelectShapesInRect(Rect rect)
-    {
-        ClearSelection();
-        foreach (var shape in Shapes)
-        {
-            if (!shape.IsVisible) continue;
-            var b = shape.Bounds;
-            if (rect.Intersects(b))
-            {
-                shape.IsSelected = true;
-                SelectedShapes.Add(shape);
-            }
-        }
-        _selectedShape = SelectedShapes.Count == 1 ? SelectedShapes[0] : null;
-        NotifySelectionChanged();
-    }
-
-    public Rect? GetSelectionBounds()
-    {
-        if (SelectedShapes.Count == 0) return null;
-        var first = SelectedShapes[0].Bounds;
-        double l = first.Left, t = first.Top, r = first.Right, b = first.Bottom;
-        for (int i = 1; i < SelectedShapes.Count; i++)
-        {
-            var sb = SelectedShapes[i].Bounds;
-            l = Math.Min(l, sb.Left);
-            t = Math.Min(t, sb.Top);
-            r = Math.Max(r, sb.Right);
-            b = Math.Max(b, sb.Bottom);
-        }
-        return new Rect(l, t, r - l, b - t);
-    }
-
-    public void MoveSelected(Point delta)
-    {
-        foreach (var shape in SelectedShapes)
-        {
-            if (!IsShapeOnLockedLayer(shape))
-                shape.Move(delta);
-        }
-    }
+    public bool HasBothSelected => _selectedShape is not null && _secondSelectedShape is not null;
 
     // Прокси-свойства для привязки слайдеров
     public double SelectedOpacity
     {
-        get => _selectedShape?.Opacity ?? (SelectedShapes.Count > 0 ? SelectedShapes[0].Opacity : 1.0);
+        get => _selectedShape?.Opacity ?? 1.0;
         set
         {
-            foreach (var s in SelectedShapes)
-                s.Opacity = value;
+            if (_selectedShape is not null)
+                _selectedShape.Opacity = value;
         }
     }
 
     public double SelectedStrokeWidth
     {
-        get => _selectedShape?.StrokeWidth ?? (SelectedShapes.Count > 0 ? SelectedShapes[0].StrokeWidth : 1.5);
+        get => _selectedShape?.StrokeWidth ?? 1.5;
         set
         {
-            foreach (var s in SelectedShapes)
-                s.StrokeWidth = value;
+            if (_selectedShape is not null)
+                _selectedShape.StrokeWidth = value;
         }
     }
 
@@ -175,7 +126,15 @@ public class MainWindowViewModel : ObservableBase
             OnPropertyChanged(nameof(IsRectangleTool));
             OnPropertyChanged(nameof(IsTriangleTool));
             OnPropertyChanged(nameof(IsLineTool));
-            StatusTool = ShapeRegistry.GetDisplayName(value);
+            StatusTool = value switch
+            {
+                ToolType.Select    => "Выбор",
+                ToolType.Circle    => "Круг",
+                ToolType.Rectangle => "Прямоугольник",
+                ToolType.Triangle  => "Треугольник",
+                ToolType.Line      => "Линия",
+                _                  => "Выбор",
+            };
         }
     }
 
@@ -205,7 +164,7 @@ public class MainWindowViewModel : ObservableBase
         set { if (value) CurrentTool = ToolType.Line; }
     }
 
-    private int _nextLayerNumber = 1;
+    private int _layerCount = 1;
 
     public bool CanUndo => _scene.CanUndo;
     public bool CanRedo => _scene.CanRedo;
@@ -230,6 +189,11 @@ public class MainWindowViewModel : ObservableBase
     public ICommand BringForwardCommand { get; }
     public ICommand SendBackwardCommand { get; }
 
+    // Булевы операции
+    public ICommand CombineUnionCommand { get; }
+    public ICommand CombineIntersectCommand { get; }
+    public ICommand CombineExcludeCommand { get; }
+
     private string _angleInput = "";
     public string AngleInput
     {
@@ -237,7 +201,7 @@ public class MainWindowViewModel : ObservableBase
         set => SetField(ref _angleInput, value);
     }
 
-    private Color _activeFillColor = EditorConstants.DefaultFillColor;
+    private Color _activeFillColor = Color.FromRgb(100, 149, 237);
     public Color ActiveFillColor
     {
         get => _activeFillColor;
@@ -269,7 +233,7 @@ public class MainWindowViewModel : ObservableBase
     public string StatusMouse { get => _statusMouse; set => SetField(ref _statusMouse, value); }
 
     public string StatusZoom => $"{(int)(_zoomFactor * 100)}%";
-    public string StatusCanvasSize => $"{(int)EditorConstants.CanvasWidth} x {(int)EditorConstants.CanvasHeight}";
+    public string StatusCanvasSize => "1600 x 1200";
 
     public string StatusInfo => $"Фигур: {Shapes.Count} | Слой: {ActiveLayer?.Name ?? "—"}";
 
@@ -284,7 +248,7 @@ public class MainWindowViewModel : ObservableBase
 
         UndoCommand = new RelayCommand(Undo, () => _scene.CanUndo);
         RedoCommand = new RelayCommand(Redo, () => _scene.CanRedo);
-        DeleteCommand = new RelayCommand(DeleteSelected, () => HasSelection);
+        DeleteCommand = new RelayCommand(DeleteSelected, () => _selectedShape is not null);
         ClearAllCommand = new RelayCommand(ClearAll);
         AddLayerCommand = new RelayCommand(AddLayer);
         DeleteLayerCommand = new RelayCommand(DeleteLayer, () => Layers.Count > 1);
@@ -300,50 +264,44 @@ public class MainWindowViewModel : ObservableBase
         BringForwardCommand = new RelayCommand(BringForward, () => HasSelection);
         SendBackwardCommand = new RelayCommand(SendBackward, () => HasSelection);
 
-        var defaultLayer = new LayerViewModel { Name = EditorConstants.DefaultLayerName };
+        CombineUnionCommand     = new RelayCommand(() => CombineShapes(AvaloniaCombineMode.Union),     () => HasBothSelected);
+        CombineIntersectCommand = new RelayCommand(() => CombineShapes(AvaloniaCombineMode.Intersect), () => HasBothSelected);
+        CombineExcludeCommand   = new RelayCommand(() => CombineShapes(AvaloniaCombineMode.Exclude),   () => HasBothSelected);
+
+        var defaultLayer = new LayerViewModel { Name = "Слой 1" };
         RegisterLayer(defaultLayer);
         _layerManager.SetActive(defaultLayer);
         OnPropertyChanged(nameof(ActiveLayer));
-    }
-
-    public Point SnapToGrid(Point p)
-    {
-        double step = GridStep;
-        return new Point(
-            Math.Round(p.X / step, MidpointRounding.AwayFromZero) * step,
-            Math.Round(p.Y / step, MidpointRounding.AwayFromZero) * step);
     }
 
     public ShapeViewModel CreateShape(ToolType tool, Point p1, Point p2) =>
         _shapeCreator.Create(
             tool, p1, p2,
             _activeFillColor, _activeStrokeColor,
-            ActiveLayer?.Name ?? EditorConstants.DefaultLayerName,
+            ActiveLayer?.Name ?? "Слой 1",
             ActiveLayer?.IsVisible ?? true);
 
-    public void AddShape(ShapeViewModel shape)
-    {
-        if (IsActiveLayerLocked) return;
+    public void AddShape(ShapeViewModel shape) =>
         ExecuteScene(() => _scene.Add(shape));
-    }
+
+    public void MoveShape(ShapeViewModel shape, Point delta) =>
+        ExecuteScene(() => _scene.Move(shape, delta));
 
     public void RotateSelected(double angle)
     {
-        if (_selectedShape is null || IsShapeOnLockedLayer(_selectedShape)) return;
+        if (_selectedShape is null) return;
         ExecuteScene(() => _scene.Rotate(_selectedShape, angle));
     }
 
     private void MirrorXSelected()
     {
-        if (_selectedShape is null || IsShapeOnLockedLayer(_selectedShape)) return;
-        _selectedShape.MirrorX();
+        _selectedShape?.MirrorX();
         NotifyUndoRedo();
     }
 
     private void MirrorYSelected()
     {
-        if (_selectedShape is null || IsShapeOnLockedLayer(_selectedShape)) return;
-        _selectedShape.MirrorY();
+        _selectedShape?.MirrorY();
         NotifyUndoRedo();
     }
 
@@ -359,7 +317,7 @@ public class MainWindowViewModel : ObservableBase
     // Z-порядок
     private void BringToFront()
     {
-        if (_selectedShape is null || IsShapeOnLockedLayer(_selectedShape)) return;
+        if (_selectedShape is null) return;
         int idx = Shapes.IndexOf(_selectedShape);
         if (idx < 0 || idx == Shapes.Count - 1) return;
         Shapes.Move(idx, Shapes.Count - 1);
@@ -367,7 +325,7 @@ public class MainWindowViewModel : ObservableBase
 
     private void SendToBack()
     {
-        if (_selectedShape is null || IsShapeOnLockedLayer(_selectedShape)) return;
+        if (_selectedShape is null) return;
         int idx = Shapes.IndexOf(_selectedShape);
         if (idx <= 0) return;
         Shapes.Move(idx, 0);
@@ -375,7 +333,7 @@ public class MainWindowViewModel : ObservableBase
 
     private void BringForward()
     {
-        if (_selectedShape is null || IsShapeOnLockedLayer(_selectedShape)) return;
+        if (_selectedShape is null) return;
         int idx = Shapes.IndexOf(_selectedShape);
         if (idx < 0 || idx == Shapes.Count - 1) return;
         Shapes.Move(idx, idx + 1);
@@ -383,17 +341,24 @@ public class MainWindowViewModel : ObservableBase
 
     private void SendBackward()
     {
-        if (_selectedShape is null || IsShapeOnLockedLayer(_selectedShape)) return;
+        if (_selectedShape is null) return;
         int idx = Shapes.IndexOf(_selectedShape);
         if (idx <= 0) return;
         Shapes.Move(idx, idx - 1);
+    }
+
+    public void MoveShapeOrder(int fromIndex, int toIndex)
+    {
+        if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) return;
+        if (fromIndex >= Shapes.Count || toIndex >= Shapes.Count) return;
+        Shapes.Move(fromIndex, toIndex);
     }
 
     public void ApplyFillColor(Color color)
     {
         ActiveFillColor = color;
         AddRecentColor(color);
-        if (_selectedShape is null || IsShapeOnLockedLayer(_selectedShape)) return;
+        if (_selectedShape is null) return;
         ExecuteScene(() => _scene.ChangeStyle(_selectedShape, color, _selectedShape.StrokeColor));
     }
 
@@ -401,7 +366,7 @@ public class MainWindowViewModel : ObservableBase
     {
         ActiveStrokeColor = color;
         AddRecentColor(color);
-        if (_selectedShape is null || IsShapeOnLockedLayer(_selectedShape)) return;
+        if (_selectedShape is null) return;
         ExecuteScene(() => _scene.ChangeStyle(_selectedShape, _selectedShape.FillColor, color));
     }
 
@@ -418,32 +383,21 @@ public class MainWindowViewModel : ObservableBase
 
     private void DeleteSelected()
     {
-        if (SelectedShapes.Count == 0) return;
-        var toDelete = SelectedShapes.Where(s => !IsShapeOnLockedLayer(s)).ToList();
-        foreach (var shape in toDelete)
-            ExecuteScene(() => _scene.Delete(shape));
+        if (_selectedShape is null) return;
+        ExecuteScene(() => _scene.Delete(_selectedShape));
         SelectedShape = null;
     }
 
     private void ClearAll()
     {
-        if (IsActiveLayerLocked) return;
-        var layerName = ActiveLayer?.Name;
-        if (layerName is null) return;
-
-        if (_selectedShape?.LayerName == layerName)
-            SelectedShape = null;
-
-        var toRemove = Shapes.Where(s => s.LayerName == layerName).ToList();
-        foreach (var shape in toRemove)
-            Shapes.Remove(shape);
-
+        Shapes.Clear();
+        SelectedShape = null;
         NotifyUndoRedo();
     }
 
     private void AddLayer()
     {
-        var layer = new LayerViewModel { Name = $"Слой {++_nextLayerNumber}" };
+        var layer = new LayerViewModel { Name = $"Слой {++_layerCount}" };
         RegisterLayer(layer);
         _layerManager.SetActive(layer);
         OnPropertyChanged(nameof(ActiveLayer));
@@ -474,8 +428,7 @@ public class MainWindowViewModel : ObservableBase
 
     public void MoveSelectedShapeToLayer(LayerViewModel target)
     {
-        if (_selectedShape is null || IsShapeOnLockedLayer(_selectedShape)) return;
-        if (target.IsLocked) return;
+        if (_selectedShape is null) return;
         var fromLayer = Layers.FirstOrDefault(l => l.Name == _selectedShape.LayerName);
         fromLayer?.Shapes.Remove(_selectedShape);
         _layerManager.MoveShapeToLayer(_selectedShape, target);
@@ -548,7 +501,7 @@ public class MainWindowViewModel : ObservableBase
         Layers[0].Shapes.Clear();
         _layerManager.SetActive(Layers[0]);
         OnPropertyChanged(nameof(ActiveLayer));
-        _nextLayerNumber = 1;
+        _layerCount = 1;
 
         Shapes.Clear();
         SelectedShape = null;
@@ -572,7 +525,7 @@ public class MainWindowViewModel : ObservableBase
 
         clone.Name = $"{_clipboard.Name} (копия)";
         clone.Move(new Point(20, 20));
-        clone.LayerName = ActiveLayer?.Name ?? EditorConstants.DefaultLayerName;
+        clone.LayerName = ActiveLayer?.Name ?? "Слой 1";
         clone.IsVisible = ActiveLayer?.IsVisible ?? true;
 
         AddShape(clone);
@@ -595,13 +548,29 @@ public class MainWindowViewModel : ObservableBase
         ((RelayCommand)RedoCommand).RaiseCanExecuteChanged();
     }
 
-    private void NotifySelectionChanged()
+    private void CombineShapes(AvaloniaCombineMode mode)
     {
-        OnPropertyChanged(nameof(SelectedShape));
-        OnPropertyChanged(nameof(HasSelection));
-        OnPropertyChanged(nameof(SelectedOpacity));
-        OnPropertyChanged(nameof(SelectedStrokeWidth));
-        RaiseAllCommands();
+        if (_selectedShape is null || _secondSelectedShape is null) return;
+        if (_selectedShape == _secondSelectedShape) return;
+
+        var s1 = _selectedShape;
+        var s2 = _secondSelectedShape;
+
+        var combined = new CombinedShapeViewModel(s1, s2, mode)
+        {
+            LayerName = s1.LayerName,
+            IsVisible = s1.IsVisible,
+        };
+
+        SelectedShape = null;
+        SecondSelectedShape = null;
+
+        Shapes.Remove(s1);
+        Shapes.Remove(s2);
+        Shapes.Add(combined);
+
+        SelectedShape = combined;
+        NotifyUndoRedo();
     }
 
     private void RaiseAllCommands()
@@ -616,5 +585,8 @@ public class MainWindowViewModel : ObservableBase
         ((RelayCommand)SendToBackCommand).RaiseCanExecuteChanged();
         ((RelayCommand)BringForwardCommand).RaiseCanExecuteChanged();
         ((RelayCommand)SendBackwardCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)CombineUnionCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)CombineIntersectCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)CombineExcludeCommand).RaiseCanExecuteChanged();
     }
 }

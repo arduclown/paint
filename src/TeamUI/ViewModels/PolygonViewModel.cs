@@ -1,4 +1,6 @@
+using System;
 using System.Linq;
+using System.Text;
 using Avalonia;
 using GraphicEditor.TeamTools.Shapes;
 
@@ -30,7 +32,24 @@ public class PolygonViewModel : ShapeViewModel
         }
     }
 
-    public override string Geometry => _polygon.SerializedData;
+    public override string Geometry
+    {
+        get
+        {
+            var pts = _polygon.Points;
+            if (pts.Length == 0) return "";
+
+            var sb = new StringBuilder();
+            sb.Append(FormattableString.Invariant($"M {pts[0].X:F2},{pts[0].Y:F2}"));
+            for (int i = 1; i < pts.Length; i++)
+                sb.Append(FormattableString.Invariant($" L {pts[i].X:F2},{pts[i].Y:F2}"));
+
+            if (_shapeType != "Line")
+                sb.Append(" Z");
+
+            return sb.ToString();
+        }
+    }
 
     public override void Move(Point delta)
     {
@@ -44,9 +63,16 @@ public class PolygonViewModel : ShapeViewModel
         NotifyGeometryChanged();
     }
 
-    public override void Scale(double ratioX, double ratioY)
+    public override void ScaleXY(double sx, double sy)
     {
-        _polygon.Scale(ratioX, ratioY);
+        var b = Bounds;
+        double cx = b.X + b.Width / 2;
+        double cy = b.Y + b.Height / 2;
+        var pts = _polygon.Points;
+        for (int i = 0; i < pts.Length; i++)
+            pts[i] = new Point(
+                cx + (pts[i].X - cx) * sx,
+                cy + (pts[i].Y - cy) * sy);
         NotifyGeometryChanged();
     }
 

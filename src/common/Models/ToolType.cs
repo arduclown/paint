@@ -8,3 +8,5 @@ public enum ToolType
     Triangle,
     Line
 }
+
+public record ToolInfo(ToolType Type, string DisplayName, string Hotkey);
