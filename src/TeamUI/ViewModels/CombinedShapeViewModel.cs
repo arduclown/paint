@@ -33,12 +33,29 @@ public class CombinedShapeViewModel : ShapeViewModel
     // Для SVG-экспорта — объединяем path-строки обеих фигур
     public override string Geometry => $"{_shape1.Geometry} {_shape2.Geometry}";
 
-    public override Avalonia.Media.Geometry GeometryData => new CombinedGeometry
+    public override Avalonia.Media.Geometry GeometryData
     {
-        GeometryCombineMode = _combineMode,
-        Geometry1 = _shape1.GeometryData,
-        Geometry2 = _shape2.GeometryData,
-    };
+        get
+        {
+            if (_combineMode == GeometryCombineMode.Exclude)
+            {
+                // GeometryGroup с правилом EvenOdd корректно рендерит «дыру»:
+                // область пересечения вычитается из первой фигуры.
+                return new GeometryGroup
+                {
+                    FillRule = FillRule.EvenOdd,
+                    Children = [_shape1.GeometryData, _shape2.GeometryData],
+                };
+            }
+
+            return new CombinedGeometry
+            {
+                GeometryCombineMode = _combineMode,
+                Geometry1 = _shape1.GeometryData,
+                Geometry2 = _shape2.GeometryData,
+            };
+        }
+    }
 
     public override Rect Bounds
     {
@@ -46,6 +63,27 @@ public class CombinedShapeViewModel : ShapeViewModel
         {
             var b1 = _shape1.Bounds;
             var b2 = _shape2.Bounds;
+
+            if (_combineMode == GeometryCombineMode.Intersect)
+            {
+                // Для пересечения bbox — это пересечение прямоугольников
+                double ix = Math.Max(b1.X, b2.X);
+                double iy = Math.Max(b1.Y, b2.Y);
+                double ir = Math.Min(b1.Right, b2.Right);
+                double ib = Math.Min(b1.Bottom, b2.Bottom);
+                if (ir > ix && ib > iy)
+                    return new Rect(ix, iy, ir - ix, ib - iy);
+                // Фигуры не пересекаются — берём bbox первой
+                return b1;
+            }
+
+            if (_combineMode == GeometryCombineMode.Exclude)
+            {
+                // Для вычитания bbox — это bbox первой фигуры
+                return b1;
+            }
+
+            // Union / Xor — объединение bbox
             double x      = Math.Min(b1.X, b2.X);
             double y      = Math.Min(b1.Y, b2.Y);
             double right  = Math.Max(b1.Right, b2.Right);

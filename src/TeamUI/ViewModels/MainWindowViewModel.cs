@@ -68,6 +68,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(HasBothSelected));
             OnPropertyChanged(nameof(SelectedOpacity));
             OnPropertyChanged(nameof(SelectedStrokeWidth));
+            _selectedScale = 1.0;
+            OnPropertyChanged(nameof(SelectedScale));
             RaiseAllCommands();
         }
     }
@@ -94,6 +96,21 @@ public class MainWindowViewModel : INotifyPropertyChanged
     public bool HasBothSelected => _selectedShape is not null && _secondSelectedShape is not null;
 
     // Прокси-свойства для привязки слайдеров
+    private double _selectedScale = 1.0;
+    public double SelectedScale
+    {
+        get => _selectedScale;
+        set
+        {
+            if (_selectedShape is not null && Math.Abs(_selectedScale - value) > 0.001)
+            {
+                double ratio = value / _selectedScale;
+                _selectedShape.Scale(ratio);
+            }
+            SetField(ref _selectedScale, value);
+        }
+    }
+
     public double SelectedOpacity
     {
         get => _selectedShape?.Opacity ?? 1.0;
@@ -378,8 +395,21 @@ public class MainWindowViewModel : INotifyPropertyChanged
         while (RecentColors.Count > 8) RecentColors.RemoveAt(RecentColors.Count - 1);
     }
 
-    private void Undo() { _scene.Undo(); NotifyUndoRedo(); }
-    private void Redo() { _scene.Redo(); NotifyUndoRedo(); }
+    private void Undo()
+    {
+        _scene.Undo();
+        NotifyUndoRedo();
+        if (_selectedShape is not null && !Shapes.Contains(_selectedShape))
+            SelectedShape = null;
+    }
+
+    private void Redo()
+    {
+        _scene.Redo();
+        NotifyUndoRedo();
+        if (_selectedShape is not null && !Shapes.Contains(_selectedShape))
+            SelectedShape = null;
+    }
 
     private void DeleteSelected()
     {
@@ -565,12 +595,9 @@ public class MainWindowViewModel : INotifyPropertyChanged
         SelectedShape = null;
         SecondSelectedShape = null;
 
-        Shapes.Remove(s1);
-        Shapes.Remove(s2);
-        Shapes.Add(combined);
+        ExecuteScene(() => _scene.CombineShapes(s1, s2, combined));
 
         SelectedShape = combined;
-        NotifyUndoRedo();
     }
 
     private void RaiseAllCommands()

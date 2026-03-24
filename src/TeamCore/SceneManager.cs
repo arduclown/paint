@@ -27,6 +27,9 @@ public class SceneManager(ISceneCollection shapes)
     public void ChangeStyle(ISceneShape shape, Color fill, Color stroke) =>
         _commandManager.ExecuteCommand(new ChangeStyleCommand(shape, fill, stroke));
 
+    public void CombineShapes(ISceneShape shape1, ISceneShape shape2, ISceneShape combined) =>
+        _commandManager.ExecuteCommand(new BooleanShapeCommand(shapes, shape1, shape2, combined));
+
     public void Undo() => _commandManager.Undo();
     public void Redo() => _commandManager.Redo();
 }

@@ -370,7 +370,7 @@
                             <TextBlock Text="Имя:" Foreground="#D4D4D4" FontSize="12" />
                             <TextBox x:Name="ShapeNameBox"
                                      Background="#3C3C3C"
-                                     Foreground="White"
+                                     Foreground="Black"
                                      BorderBrush="#555"
                                      FontSize="13"
                                      TextChanged="ShapeNameBox_TextChanged" />
@@ -455,7 +455,7 @@
                                 <TextBox Watermark="Угол°"
                                          Width="70"
                                          Text="{Binding AngleInput, Mode=TwoWay}"
-                                         Background="#3C3C3C" Foreground="White"
+                                         Background="#3C3C3C" Foreground="Black"
                                          BorderBrush="#555" FontSize="11"
                                          KeyDown="AngleBox_KeyDown" />
                                 <Button Content="OK"
@@ -465,6 +465,9 @@
                             </StackPanel>
 
                             <TextBlock Text="Масштаб:" Foreground="#D4D4D4" FontSize="12" />
+                            <Slider Minimum="0.1" Maximum="3.0"
+                                    Value="{Binding SelectedScale, Mode=TwoWay}"
+                                    TickFrequency="0.05" />
                             <StackPanel Orientation="Horizontal" Spacing="4">
                                 <Button Content="0.5x" Command="{Binding ScaleHalfCommand}" Classes="transformBtn" Padding="6,3" />
                                 <Button Content="2x" Command="{Binding ScaleDoubleCommand}" Classes="transformBtn" Padding="6,3" />
